@@ -27,10 +27,23 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Decode signing keystore
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
+      - name: Check signing secrets
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 --decode > "$GITHUB_WORKSPACE/release.keystore"
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then echo "Missing secret: SIGNING_KEYSTORE_BASE64"; exit 1; fi
+          if [ -z "$SIGNING_STORE_PASSWORD" ]; then echo "Missing secret: SIGNING_STORE_PASSWORD"; exit 1; fi
+          if [ -z "$SIGNING_KEY_ALIAS" ]; then echo "Missing secret: SIGNING_KEY_ALIAS"; exit 1; fi
+          if [ -z "$SIGNING_KEY_PASSWORD" ]; then echo "Missing secret: SIGNING_KEY_PASSWORD"; exit 1; fi
+
+      - name: Decode signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/release.keystore"
 
       - name: Build Release APK
         env:

@@ -1,0 +1,4 @@
+Invalid workflow file: .github/workflows/release.yml#L1
+(Line: 31, Col: 13): Unrecognized named-value: 'secrets'. Located at position 1 within expression: secrets.SIGNING_KEYSTORE_BASE64 != ''
+Invalid workflow file: .github/workflows/release.yml#L1
+(Line: 31, Col: 13): Unrecognized named-value: 'secrets'. Located at position 1 within expression: secrets.SIGNING_KEYSTORE_BASE64 != ''

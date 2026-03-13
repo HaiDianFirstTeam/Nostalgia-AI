@@ -102,6 +102,8 @@ git branch -M main
 
 ```powershell
 git push -u origin main
+
+（强制推送）git push -f origin main
 ```
 
 > 如果提示要登录：按提示在浏览器登录 GitHub。
