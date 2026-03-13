@@ -19,12 +19,10 @@ buildscript {
 // Make sure Android plugin runs on JDK 8 bytecode.
 // (CI will pin JDK 8 or 11, not 25.)
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+// NOTE:
+// Repositories are defined in settings.gradle (dependencyResolutionManagement).
+// Do NOT add google()/mavenCentral() here, otherwise Gradle will fail with:
+// "prefer settings repositories over project repositories".
 
 task clean(type: Delete) {
     delete rootProject.buildDir

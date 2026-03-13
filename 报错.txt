@@ -1,4 +1,62 @@
-Invalid workflow file: .github/workflows/release.yml#L1
-(Line: 31, Col: 13): Unrecognized named-value: 'secrets'. Located at position 1 within expression: secrets.SIGNING_KEYSTORE_BASE64 != ''
-Invalid workflow file: .github/workflows/release.yml#L1
-(Line: 31, Col: 13): Unrecognized named-value: 'secrets'. Located at position 1 within expression: secrets.SIGNING_KEYSTORE_BASE64 != ''
+Run if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then echo "Missing secret: SIGNING_KEYSTORE_BASE64"; exit 1; fi
+  if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then echo "Missing secret: SIGNING_KEYSTORE_BASE64"; exit 1; fi
+  if [ -z "$SIGNING_STORE_PASSWORD" ]; then echo "Missing secret: SIGNING_STORE_PASSWORD"; exit 1; fi
+  if [ -z "$SIGNING_KEY_ALIAS" ]; then echo "Missing secret: SIGNING_KEY_ALIAS"; exit 1; fi
+  if [ -z "$SIGNING_KEY_PASSWORD" ]; then echo "Missing secret: SIGNING_KEY_PASSWORD"; exit 1; fi
+  shell: /usr/bin/bash -e {0}
+  env:
+    JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.30-7/x64
+    JAVA_HOME_11_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.30-7/x64
+    GRADLE_ACTION_ID: gradle/actions/setup-gradle
+    GRADLE_USER_HOME: /home/runner/.gradle
+    GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+    GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+    DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+    DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+    GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+    SIGNING_KEYSTORE_BASE64: ***
+    SIGNING_STORE_PASSWORD: ***
+    SIGNING_KEY_ALIAS: ***
+    SIGNING_KEY_PASSWORD: ***
+0s
+Run printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/release.keystore"
+  printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/release.keystore"
+  shell: /usr/bin/bash -e {0}
+  env:
+    JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.30-7/x64
+    JAVA_HOME_11_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11.0.30-7/x64
+    GRADLE_ACTION_ID: gradle/actions/setup-gradle
+    GRADLE_USER_HOME: /home/runner/.gradle
+    GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+    GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+    DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+    DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+    GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+    SIGNING_KEYSTORE_BASE64: ***
+32s
+Run chmod +x ./gradlew
+Downloading https://downloads.gradle.org/distributions/gradle-7.5-bin.zip
+...........10%............20%...........30%............40%...........50%............60%...........70%............80%...........90%............100%
+Welcome to Gradle 7.5!
+Here are the highlights of this release:
+ - Support for Java 18
+ - Support for building with Groovy 4
+ - Much more responsive continuous builds
+ - Improved diagnostics for dependency resolution
+For more details see https://docs.gradle.org/7.5/release-notes.html
+Starting a Gradle Daemon (subsequent builds will be faster)
+Configuration on demand is an incubating feature.
+FAILURE: Build failed with an exception.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1773415967806.json
+* Where:
+Build file '/home/runner/work/Nostalgia-AI/Nostalgia-AI/build.gradle' line: 24
+* What went wrong:
+A problem occurred evaluating root project 'Nostalgia-AI'.
+> Build was configured to prefer settings repositories over project repositories but repository 'Google' was added by build file 'build.gradle'
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+* Get more help at https://help.gradle.org
+BUILD FAILED in 31s
+Error: Process completed with exit code 1.
