@@ -26,7 +26,7 @@
             android:layout_height="32dp"
             android:background="@android:color/transparent"
             android:contentDescription="@string/action_edit"
-            android:src="@android:drawable/ic_menu_edit" />
+            android:src="@drawable/ic_edit_24" />
 
         <ImageButton
             android:id="@+id/btnCopy"
@@ -34,7 +34,7 @@
             android:layout_height="32dp"
             android:background="@android:color/transparent"
             android:contentDescription="@string/action_copy"
-            android:src="@android:drawable/ic_menu_copy" />
+            android:src="@drawable/ic_copy_24" />
 
         <ImageButton
             android:id="@+id/btnRetry"
@@ -42,7 +42,7 @@
             android:layout_height="32dp"
             android:background="@android:color/transparent"
             android:contentDescription="@string/action_retry"
-            android:src="@android:drawable/ic_popup_sync" />
+            android:src="@drawable/ic_retry_24" />
     </LinearLayout>
 
 </LinearLayout>
