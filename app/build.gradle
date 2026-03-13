@@ -119,7 +119,8 @@ dependencies {
     implementation 'io.noties.markwon:ext-tasklist:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
     implementation 'io.noties.markwon:image:4.6.2'
-    implementation 'io.noties.markwon:image-okhttp:4.6.2'
+    // NOTE: image-okhttp artifact is not available on Maven Central for v4.
+    // OkHttp integration is done via OkHttpNetworkSchemeHandler in :image module.
 
     // PDF parsing (Android 4.4.2+)
     implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
