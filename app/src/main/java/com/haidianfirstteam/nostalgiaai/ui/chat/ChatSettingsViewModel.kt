@@ -49,7 +49,7 @@ class ChatSettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun buildTargets(): List<ChatTargetUi> {
+    private suspend fun buildTargets(): List<ChatTargetUi> {
         val providers: List<ProviderEntity> = db.providers().listAll()
         val models: List<ModelEntity> = db.models().listAll()
         val groups: List<ModelGroupEntity> = db.modelGroups().listAll()

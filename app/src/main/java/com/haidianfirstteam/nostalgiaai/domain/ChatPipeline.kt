@@ -276,7 +276,7 @@ class ChatPipeline(
         return parts
     }
 
-    private fun fetchWebContext(query: String, maxResults: Int): String? {
+    private suspend fun fetchWebContext(query: String, maxResults: Int): String? {
         return try {
             val baseUrl = db.appSettings().get("tavily_base_url")?.value ?: "https://api.tavily.com"
             val key = tavilyKeyRouter.pickOne() ?: return null
