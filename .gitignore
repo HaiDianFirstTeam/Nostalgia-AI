@@ -1,0 +1,18 @@
+.idea/
+.vscode/
+*.iml
+
+.gradle/
+build/
+**/build/
+
+local.properties
+*.keystore
+*.jks
+
+*.log
+
+# local helper downloads
+.gradle-dist.zip
+.gradle-local/
+.jdk*.zip

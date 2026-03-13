@@ -1,0 +1,74 @@
+package com.haidianfirstteam.nostalgiaai.net
+
+import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
+import okhttp3.MediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+class TavilyClient(
+    private val baseUrl: String,
+    private val apiKey: String,
+    private val gson: Gson = Gson()
+) {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
+
+    @Throws(IOException::class)
+    fun search(query: String, maxResults: Int): TavilySearchResponse {
+        val url = normalizeBaseUrl(baseUrl) + "/search"
+        val req = TavilySearchRequest(
+            apiKey = apiKey,
+            query = query,
+            maxResults = maxResults
+        )
+        val json = gson.toJson(req)
+        val body = RequestBody.create(MediaType.parse("application/json"), json)
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build()
+
+        client.newCall(request).execute().use { resp ->
+            val text = resp.body()?.string() ?: ""
+            if (!resp.isSuccessful) {
+                return TavilySearchResponse(error = "HTTP ${resp.code()} ${resp.message()} $text")
+            }
+            return gson.fromJson(text, TavilySearchResponse::class.java)
+        }
+    }
+
+    private fun normalizeBaseUrl(raw: String): String {
+        var u = raw.trim()
+        if (u.endsWith("/")) u = u.dropLast(1)
+        return u
+    }
+}
+
+data class TavilySearchRequest(
+    @SerializedName("api_key") val apiKey: String,
+    @SerializedName("query") val query: String,
+    @SerializedName("max_results") val maxResults: Int,
+    @SerializedName("include_answer") val includeAnswer: Boolean = false,
+    @SerializedName("include_images") val includeImages: Boolean = false,
+    @SerializedName("include_raw_content") val includeRawContent: Boolean = false
+)
+
+data class TavilySearchResponse(
+    @SerializedName("query") val query: String? = null,
+    @SerializedName("results") val results: List<TavilyResult> = emptyList(),
+    @SerializedName("error") val error: String? = null
+)
+
+data class TavilyResult(
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("url") val url: String? = null,
+    @SerializedName("content") val content: String? = null
+)
