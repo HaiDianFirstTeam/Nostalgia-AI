@@ -99,7 +99,7 @@ class MessageAdapter(
                     if (!expanded) {
                         // single row with horizontal scroll
                         list.forEach { link ->
-                            b.chipsContainer.addView(makeChip(ctx, link))
+                            b.chipsContainer.addView(makeChip(link))
                         }
                         b.chipsScroll.isHorizontalScrollBarEnabled = false
                     } else {
@@ -118,13 +118,13 @@ class MessageAdapter(
                                 }
                                 b.chipsContainer.addView(row)
                             }
-                            row?.addView(makeChip(ctx, link))
+                            row?.addView(makeChip(link))
                         }
                         b.chipsScroll.isHorizontalScrollBarEnabled = false
                     }
                 }
 
-                fun makeChip(ctx: Context, link: WebLinkUi): View {
+                fun makeChip(link: WebLinkUi): View {
                     val tv = android.widget.TextView(ctx)
                     tv.text = link.title
                     tv.setSingleLine(true)
