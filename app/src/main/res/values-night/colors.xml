@@ -1,0 +1,4 @@
+<resources>
+    <!-- Drawer background: keep dark mode unchanged -->
+    <color name="drawer_panel_bg">#121212</color>
+</resources>

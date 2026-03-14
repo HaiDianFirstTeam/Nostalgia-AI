@@ -23,12 +23,39 @@ class MessageAdapter(
     private val onEditAssistant: (MessageUi, String) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
+    init {
+        setHasStableIds(true)
+    }
+
     private val items = ArrayList<MessageUi>()
 
     fun submit(list: List<MessageUi>) {
+        // Minimal diff to reduce jitter during streaming.
+        // Assumes stable ordering by createdAt/id.
+        val old = items.toList()
         items.clear()
         items.addAll(list)
+        if (old.isEmpty()) {
+            notifyDataSetChanged()
+            return
+        }
+        // If only last item content is changing (streaming), update that item only.
+        if (old.size == items.size) {
+            val lastIdx = items.size - 1
+            var samePrefix = true
+            for (i in 0 until lastIdx) {
+                if (old[i].id != items[i].id) { samePrefix = false; break }
+            }
+            if (samePrefix && old[lastIdx].id == items[lastIdx].id) {
+                notifyItemChanged(lastIdx)
+                return
+            }
+        }
         notifyDataSetChanged()
+    }
+
+    override fun getItemId(position: Int): Long {
+        return items[position].id
     }
 
     override fun getItemViewType(position: Int): Int {

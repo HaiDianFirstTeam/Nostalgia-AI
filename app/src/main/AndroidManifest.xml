@@ -27,6 +27,12 @@
         <activity
             android:name=".ui.settings.SettingsActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".ui.settings.ModelsActivity"
+            android:exported="false" />
+
+        <!-- Legacy screens kept for compatibility (not linked from Settings anymore) -->
         <activity
             android:name=".ui.settings.ProvidersActivity"
             android:exported="false" />

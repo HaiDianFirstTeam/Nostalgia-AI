@@ -33,12 +33,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         }
 
         findPreference<Preference>("providers")?.setOnPreferenceClickListener {
-            startActivity(ProvidersActivity.newIntent(requireContext()))
-            true
-        }
-
-        findPreference<Preference>("model_groups")?.setOnPreferenceClickListener {
-            startActivity(ModelGroupsActivity.newIntent(requireContext()))
+            startActivity(ModelsActivity.newIntent(requireContext()))
             true
         }
 

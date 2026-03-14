@@ -8,4 +8,7 @@
     <color name="md_theme_dark_onPrimary">#1B1B1B</color>
     <color name="md_theme_dark_background">#121212</color>
     <color name="md_theme_dark_onBackground">#EEEEEE</color>
+
+    <!-- Drawer background: light should be solid white for clarity -->
+    <color name="drawer_panel_bg">#FFFFFF</color>
 </resources>

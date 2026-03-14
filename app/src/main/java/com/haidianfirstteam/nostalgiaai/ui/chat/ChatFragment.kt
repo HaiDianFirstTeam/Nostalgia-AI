@@ -33,6 +33,7 @@ class ChatFragment : Fragment() {
     private val settingsVm: ChatSettingsViewModel by activityViewModels()
 
     private lateinit var adapter: MessageAdapter
+    private var stickToBottom: Boolean = true
 
     private val REQ_PICK_FILE = 1001
     private val REQ_TAKE_PHOTO = 1002
@@ -164,10 +165,20 @@ class ChatFragment : Fragment() {
         chatVm.messages.observe(viewLifecycleOwner) { list ->
             adapter.submit(list)
             binding.tvEmpty.isVisible = list.isEmpty()
-            if (list.isNotEmpty()) {
+            if (list.isNotEmpty() && stickToBottom) {
                 binding.rvMessages.scrollToPosition(list.size - 1)
             }
         }
+
+        binding.rvMessages.itemAnimator = null
+        binding.rvMessages.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                val lm = recyclerView.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager ?: return
+                val last = lm.findLastCompletelyVisibleItemPosition()
+                val total = lm.itemCount
+                stickToBottom = total <= 0 || last >= total - 1
+            }
+        })
 
         chatVm.requestState.observe(viewLifecycleOwner) { st ->
             binding.requestStatus.visibility = if (st.inFlight) View.VISIBLE else View.GONE

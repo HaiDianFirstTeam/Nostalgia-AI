@@ -13,10 +13,7 @@
     <PreferenceCategory android:title="模型与联网搜索">
         <Preference
             android:key="providers"
-            android:title="模型来源 / API Key / 模型" />
-        <Preference
-            android:key="model_groups"
-            android:title="模型组（对话页只显示组名）" />
+            android:title="模型" />
         <Preference
             android:key="tavily"
             android:title="Tavily 联网搜索" />
