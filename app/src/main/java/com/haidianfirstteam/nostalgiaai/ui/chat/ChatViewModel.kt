@@ -76,6 +76,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val now = System.currentTimeMillis()
             var userMsgId: Long = -1
             withContext(Dispatchers.IO) {
+                // Ensure conversation still exists (it may have been cleaned up unexpectedly)
+                val conv = db.conversations().getById(convId)
+                if (conv == null) throw IllegalStateException("conversation missing")
                 userMsgId = db.messages().insert(
                     MessageEntity(
                         conversationId = convId,

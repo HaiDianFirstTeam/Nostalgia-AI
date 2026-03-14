@@ -197,10 +197,14 @@ class ChatFragment : Fragment() {
 
     override fun onStop() {
         super.onStop()
-        // If user created a new conversation but never sent anything, don't keep it.
-        val id = chatVm.conversationId.value
-        if (id != null) {
-            drawerVm.deleteIfEmpty(id)
+        // Do NOT delete empty conversations onStop: file picker / camera will trigger onStop.
+        // Only cleanup when switching conversations (handled elsewhere) or when the Activity is finishing.
+        val act = activity
+        if (act != null && act.isFinishing) {
+            val id = chatVm.conversationId.value
+            if (id != null) {
+                drawerVm.deleteIfEmpty(id)
+            }
         }
     }
 
@@ -329,15 +333,17 @@ class ChatFragment : Fragment() {
     private fun renderAttachmentSummary() {
         if (attachments.isEmpty()) {
             binding.tvAttachments.text = ""
+            binding.tvAttachments.setOnClickListener(null)
             return
         }
         val sb = StringBuilder()
-        sb.append("已选择 ").append(attachments.size).append(" 个文件：")
+        sb.append("已选择 ").append(attachments.size).append(" 个文件（点击管理/删除）：")
         attachments.take(3).forEach {
             sb.append("\n• ").append(it.displayName)
         }
         if (attachments.size > 3) sb.append("\n...")
         binding.tvAttachments.text = sb.toString()
+        binding.tvAttachments.setOnClickListener { showAttachmentManageDialog() }
     }
 
     private fun showAttachmentManageDialog() {
