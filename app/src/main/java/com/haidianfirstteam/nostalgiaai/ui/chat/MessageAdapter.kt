@@ -93,37 +93,6 @@ class MessageAdapter(
                 b.btnExpandChips.rotation = 0f
                 var expanded = false
 
-                fun renderChips() {
-                    b.chipsContainer.removeAllViews()
-                    val list = if (!expanded && item.webLinks.size > 5) item.webLinks.take(5) else item.webLinks
-                    if (!expanded) {
-                        // single row with horizontal scroll
-                        list.forEach { link ->
-                            b.chipsContainer.addView(makeChip(link))
-                        }
-                        b.chipsScroll.isHorizontalScrollBarEnabled = false
-                    } else {
-                        // multi-row: render as vertical rows of chips
-                        // Simple heuristic: 3 chips per row.
-                        val rowSize = 3
-                        var row: LinearLayout? = null
-                        list.forEachIndexed { idx, link ->
-                            if (idx % rowSize == 0) {
-                                row = LinearLayout(ctx).apply {
-                                    orientation = LinearLayout.HORIZONTAL
-                                    layoutParams = LinearLayout.LayoutParams(
-                                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                                        LinearLayout.LayoutParams.WRAP_CONTENT
-                                    )
-                                }
-                                b.chipsContainer.addView(row)
-                            }
-                            row?.addView(makeChip(link))
-                        }
-                        b.chipsScroll.isHorizontalScrollBarEnabled = false
-                    }
-                }
-
                 fun makeChip(link: WebLinkUi): View {
                     val tv = android.widget.TextView(ctx)
                     tv.text = link.title
@@ -146,6 +115,39 @@ class MessageAdapter(
                         }
                     }
                     return tv
+                }
+
+                fun renderChips() {
+                    b.chipsContainer.removeAllViews()
+                    val list = if (!expanded && item.webLinks.size > 5) item.webLinks.take(5) else item.webLinks
+                    if (!expanded) {
+                        b.chipsContainer.orientation = LinearLayout.HORIZONTAL
+                        // single row with horizontal scroll
+                        list.forEach { link ->
+                            b.chipsContainer.addView(makeChip(link))
+                        }
+                        b.chipsScroll.isHorizontalScrollBarEnabled = false
+                    } else {
+                        b.chipsContainer.orientation = LinearLayout.VERTICAL
+                        // multi-row: render as vertical rows of chips
+                        // Simple heuristic: 3 chips per row.
+                        val rowSize = 3
+                        var row: LinearLayout? = null
+                        list.forEachIndexed { idx, link ->
+                            if (idx % rowSize == 0) {
+                                row = LinearLayout(ctx).apply {
+                                    orientation = LinearLayout.HORIZONTAL
+                                    layoutParams = LinearLayout.LayoutParams(
+                                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                                        LinearLayout.LayoutParams.WRAP_CONTENT
+                                    )
+                                }
+                                b.chipsContainer.addView(row)
+                            }
+                            row?.addView(makeChip(link))
+                        }
+                        b.chipsScroll.isHorizontalScrollBarEnabled = false
+                    }
                 }
 
                 renderChips()
