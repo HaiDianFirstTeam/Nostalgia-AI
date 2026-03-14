@@ -208,7 +208,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                         routedModelId = out0.routedModelId
                                         webLinks = out0.webLinks
                                     },
-                                onDeltaText = { delta ->
+                                onDeltaText = onDeltaText@{ delta ->
                                     sb.append(delta)
                                     val textNow = sb.toString()
                                     val encodedNow = if (webLinks.isNotEmpty()) {

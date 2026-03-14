@@ -1,8 +1,7 @@
 > Task :app:kaptReleaseKotlin
-e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/settings/ModelsActivity.kt:127:9 'when' expression must be exhaustive, add necessary 'is UngroupedHeader' branch or 'else' branch instead
-e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/settings/ModelsActivity.kt:227:13 'snapshot' hides member of supertype 'DragAdapter' and needs 'override' modifier
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/chat/ChatViewModel.kt:219:101 Unresolved reference: @onDeltaText
 > Task :app:compileReleaseKotlin FAILED
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1773490758685.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1773492383388.json
 FAILURE: Build failed with an exception.
 * What went wrong:
 Execution failed for task ':app:compileReleaseKotlin'.
@@ -11,8 +10,8 @@ Execution failed for task ':app:compileReleaseKotlin'.
 * Try:
 > Run with --stacktrace option to get the stack trace.
 > Run with --info or --debug option to get more log output.
-32 actionable tasks: 32 executed
 > Run with --scan to get full insights.
 * Get more help at https://help.gradle.org
-BUILD FAILED in 1m 40s
+BUILD FAILED in 1m 38s
+32 actionable tasks: 32 executed
 Error: Process completed with exit code 1.
