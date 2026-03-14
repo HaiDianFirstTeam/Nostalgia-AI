@@ -48,6 +48,11 @@ class SettingsFragment : PreferenceFragmentCompat() {
             true
         }
 
+        findPreference<Preference>("about")?.setOnPreferenceClickListener {
+            startActivity(AboutActivity.newIntent(requireContext()))
+            true
+        }
+
         // Font scale (0.5x..5.0x, step 0.1x) stored in app_settings as x10 int.
         val fontPref = findPreference<SeekBarPreference>(SettingsRepository.KEY_FONT_SCALE_X10)
         fun updateFontSummary(x10: Int) {

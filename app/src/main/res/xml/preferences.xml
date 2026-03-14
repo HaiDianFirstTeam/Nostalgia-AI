@@ -50,6 +50,10 @@
         <Preference
             android:key="import_export"
             android:title="导入 / 导出（JSON）" />
+
+        <Preference
+            android:key="about"
+            android:title="关于" />
     </PreferenceCategory>
 
 </PreferenceScreen>

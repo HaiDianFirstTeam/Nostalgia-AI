@@ -22,6 +22,10 @@ import com.haidianfirstteam.nostalgiaai.util.ToastUtil
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.appcompat.widget.SwitchCompat
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.ScrollView
+import android.widget.TextView
 
 class ChatFragment : Fragment() {
 
@@ -195,6 +199,12 @@ class ChatFragment : Fragment() {
                 binding.btnSend.contentDescription = getString(com.haidianfirstteam.nostalgiaai.R.string.action_send)
                 binding.btnSend.setImageResource(com.haidianfirstteam.nostalgiaai.R.drawable.ic_send_24)
             }
+        }
+
+        chatVm.errorDialog.observe(viewLifecycleOwner) { msg ->
+            if (msg.isNullOrBlank()) return@observe
+            showCopyableErrorDialog(msg)
+            chatVm.clearErrorDialog()
         }
 
         drawerVm.openConversationId.observe(viewLifecycleOwner) { id ->
@@ -446,6 +456,32 @@ class ChatFragment : Fragment() {
                 settingsVm.selectByIndex(selected)
             }
             .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showCopyableErrorDialog(message: String) {
+        val ctx = requireContext()
+        val tv = TextView(ctx).apply {
+            text = message
+            setTextIsSelectable(true)
+            setPadding(48, 32, 48, 0)
+        }
+        val scroll = ScrollView(ctx).apply {
+            addView(tv)
+        }
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("错误信息（可复制）")
+            .setView(scroll)
+            .setPositiveButton("复制") { _, _ ->
+                try {
+                    val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("error", message))
+                    ToastUtil.show(ctx, "已复制")
+                } catch (_: Throwable) {
+                    ToastUtil.show(ctx, "复制失败")
+                }
+            }
+            .setNegativeButton("关闭", null)
             .show()
     }
 

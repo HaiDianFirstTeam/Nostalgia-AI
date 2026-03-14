@@ -19,6 +19,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import okhttp3.Call
+import java.io.PrintWriter
+import java.io.StringWriter
 
 data class RequestState(
     val inFlight: Boolean,
@@ -40,6 +42,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _requestState = MutableLiveData<RequestState>(RequestState(false, ""))
     val requestState: LiveData<RequestState> = _requestState
+
+    private val _errorDialog = MutableLiveData<String?>(null)
+    val errorDialog: LiveData<String?> = _errorDialog
 
     private var runningJob: Job? = null
     private var runningCall: Call? = null
@@ -122,6 +127,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             val out = try {
                                 val result = pipeline.runOnce(userMsg)
                                 result.getOrElse { e ->
+                                    postErrorDialog("请求失败（非流式）", e)
                                     com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
                                         text = "请求失败：${e.message ?: "未知错误"}",
                                         routedProviderId = null,
@@ -130,6 +136,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     )
                                 }
                             } catch (e: Exception) {
+                                postErrorDialog("请求失败（非流式）", e)
                                 com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
                                     text = "请求失败：${e.message ?: "未知错误"}",
                                     routedProviderId = null,
@@ -192,6 +199,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             var routedApiKeyId: Long? = null
                             var routedModelId: Long? = null
                             var webLinks: List<com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.WebLink> = emptyList()
+                            var webLinksUi: List<WebLinkUi> = emptyList()
 
                             val mode = if (streamMode == "compat") ChatPipeline.StreamMode.COMPAT else ChatPipeline.StreamMode.ON
                             try {
@@ -207,31 +215,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                         routedApiKeyId = out0.routedApiKeyId
                                         routedModelId = out0.routedModelId
                                         webLinks = out0.webLinks
+                                        webLinksUi = out0.webLinks.map { WebLinkUi(it.title, it.url) }
                                     },
                                 onDeltaText = onDeltaText@{ delta ->
                                     sb.append(delta)
                                     val textNow = sb.toString()
-                                    val encodedNow = if (webLinks.isNotEmpty()) {
-                                        WebLinksCodec.encode(webLinks.map { WebLinkUi(it.title, it.url) }, textNow)
-                                    } else textNow
-                                    // Update DB on IO; refresh UI on main
+                                    // IMPORTANT: do NOT re-encode web links header on every delta.
+                                    // That creates large strings repeatedly and can crash low-memory devices.
+                                    // During streaming, update UI in-memory only; persist once onDone/onError.
                                     val now = System.currentTimeMillis()
                                     if (now - lastStreamUpdateAt < streamUpdateMinIntervalMs) return@onDeltaText
                                     lastStreamUpdateAt = now
 
-                                    viewModelScope.launch(Dispatchers.IO) {
-                                        val msg = db.messages().getById(assistantId) ?: return@launch
-                                        db.messages().update(msg.copy(content = encodedNow))
-                                        withContext(Dispatchers.Main) {
-                                            refreshMessages(convId)
-                                        }
-                                    }
+                                    updateAssistantPreview(assistantId, textNow)
                                 },
                                     onDone = { _ ->
                                     viewModelScope.launch(Dispatchers.IO) {
                                         val msg = db.messages().getById(assistantId) ?: return@launch
+                                        val finalText = sb.toString()
+                                        val encoded = if (webLinksUi.isNotEmpty()) {
+                                            WebLinksCodec.encode(webLinksUi, finalText)
+                                        } else finalText
                                         db.messages().update(
                                             msg.copy(
+                                                content = encoded,
                                                 routedProviderId = routedProviderId,
                                                 routedApiKeyId = routedApiKeyId,
                                                 routedModelId = routedModelId
@@ -244,6 +251,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                 },
                                 onError = { err ->
+                                    // Bubble a copyable error dialog.
+                                    _errorDialog.postValue("请求失败（流式）\n\n$err")
                                     viewModelScope.launch(Dispatchers.IO) {
                                         val msg = db.messages().getById(assistantId) ?: return@launch
                                         if (msg.content.isBlank()) {
@@ -257,6 +266,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             )
                             } catch (t: Throwable) {
                                 if (t is CancellationException) throw t
+                                postErrorDialog("请求失败（流式启动）", t)
                                 // Never crash the app on stream setup failure.
                                 withContext(Dispatchers.IO) {
                                     val msg = db.messages().getById(assistantId) ?: return@withContext
@@ -279,6 +289,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             runningJob = job
             } catch (t: Throwable) {
                 if (t is CancellationException) return@launch
+                postErrorDialog("发送失败", t)
                 // Never crash UI on send.
                 _requestState.postValue(RequestState(false, ""))
                 // Best-effort: show error as a toast via application context.
@@ -289,6 +300,37 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // ignore
                 }
             }
+        }
+    }
+
+    fun clearErrorDialog() {
+        _errorDialog.value = null
+    }
+
+    private fun updateAssistantPreview(assistantId: Long, textNow: String) {
+        val current = _messages.value ?: return
+        val idx = current.indexOfFirst { it.id == assistantId }
+        if (idx < 0) return
+        val old = current[idx]
+        val next = old.copy(content = textNow)
+        val list = current.toMutableList()
+        list[idx] = next
+        _messages.postValue(list)
+    }
+
+    private fun postErrorDialog(prefix: String, t: Throwable) {
+        try {
+            val sw = StringWriter()
+            val pw = PrintWriter(sw)
+            pw.println(prefix)
+            pw.println()
+            pw.println(t::class.java.name + ": " + (t.message ?: ""))
+            pw.println()
+            t.printStackTrace(pw)
+            pw.flush()
+            _errorDialog.postValue(sw.toString())
+        } catch (_: Throwable) {
+            _errorDialog.postValue(prefix + ": " + (t.message ?: "未知错误"))
         }
     }
 

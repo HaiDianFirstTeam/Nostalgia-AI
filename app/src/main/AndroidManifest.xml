@@ -29,6 +29,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.settings.AboutActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.settings.ModelsActivity"
             android:exported="false" />
 

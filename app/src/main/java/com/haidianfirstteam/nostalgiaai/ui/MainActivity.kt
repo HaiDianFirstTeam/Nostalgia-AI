@@ -15,6 +15,7 @@ import com.haidianfirstteam.nostalgiaai.ui.drawer.ConversationAdapter
 import com.haidianfirstteam.nostalgiaai.ui.drawer.DrawerViewModel
 import com.haidianfirstteam.nostalgiaai.ui.settings.SettingsActivity
 import com.haidianfirstteam.nostalgiaai.util.RoomDebug
+import com.haidianfirstteam.nostalgiaai.util.CrashGuard
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,10 +69,38 @@ class MainActivity : BaseActivity() {
                 .commit()
         }
 
+        showLastCrashIfAny()
+
         drawerVm.openConversationId.observe(this) { id ->
             openConversation(id)
             binding.drawerLayout.closeDrawer(GravityCompat.START)
         }
+    }
+
+    private fun showLastCrashIfAny() {
+        val app = application as? com.haidianfirstteam.nostalgiaai.NostalgiaApp ?: return
+        val crash = CrashGuard.consumeLastCrash(app) ?: return
+        val ctx = this
+        val tv = android.widget.TextView(ctx).apply {
+            text = crash
+            setTextIsSelectable(true)
+            setPadding(48, 32, 48, 0)
+        }
+        val scroll = android.widget.ScrollView(ctx).apply { addView(tv) }
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("上次崩溃日志（可复制）")
+            .setView(scroll)
+            .setPositiveButton("复制") { _, _ ->
+                try {
+                    val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", crash))
+                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已复制")
+                } catch (_: Throwable) {
+                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "复制失败")
+                }
+            }
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     private fun setupDrawerList() {
