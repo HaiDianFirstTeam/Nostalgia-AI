@@ -26,6 +26,9 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM conversations")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -59,6 +62,9 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM messages")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -71,6 +77,9 @@ interface AttachmentDao {
 
     @Insert
     suspend fun insertAll(items: List<AttachmentEntity>)
+
+    @Query("DELETE FROM attachments")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -92,6 +101,9 @@ interface ProviderDao {
 
     @Query("DELETE FROM providers WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM providers")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -113,6 +125,9 @@ interface ApiKeyDao {
 
     @Query("DELETE FROM api_keys WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM api_keys")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -137,6 +152,9 @@ interface ModelDao {
 
     @Query("DELETE FROM models WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM models")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -158,6 +176,9 @@ interface ModelGroupDao {
 
     @Query("DELETE FROM model_groups WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM model_groups")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -182,6 +203,9 @@ interface GroupRouteDao {
 
     @Query("DELETE FROM group_routes WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM group_routes")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -203,6 +227,9 @@ interface GroupProviderDao {
 
     @Query("DELETE FROM group_providers WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM group_providers")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -218,6 +245,9 @@ interface GroupProviderStateDao {
 
     @Query("DELETE FROM group_provider_states WHERE groupId=:groupId")
     suspend fun deleteByGroup(groupId: Long)
+
+    @Query("DELETE FROM group_provider_states")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -239,6 +269,9 @@ interface TavilyKeyDao {
 
     @Query("DELETE FROM tavily_keys WHERE id=:id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM tavily_keys")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -248,4 +281,7 @@ interface AppSettingDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(entity: AppSettingEntity)
+
+    @Query("DELETE FROM app_settings")
+    suspend fun deleteAll()
 }

@@ -101,9 +101,24 @@ class ImportExportRepository(
 
     private suspend fun importBundle(bundle: ExportBundle, overwrite: Boolean) {
         // Import strategy: if overwrite -> delete & insert; else upsert-like behavior.
-        // v1 minimal: overwrite is not implemented.
         if (overwrite) {
-            // NOTE: full wipe is heavy; v1 minimal: not implemented.
+            // Overwrite: wipe all data covered by the bundle.
+            // IMPORTANT: delete child tables first to avoid FK constraints.
+            db.attachments().deleteAll()
+            db.messages().deleteAll()
+            db.conversations().deleteAll()
+
+            db.groupRoutes().deleteAll()
+            db.groupProviders().deleteAll()
+            db.groupProviderStates().deleteAll()
+
+            db.models().deleteAll()
+            db.apiKeys().deleteAll()
+            db.providers().deleteAll()
+            db.modelGroups().deleteAll()
+
+            db.tavilyKeys().deleteAll()
+            db.appSettings().deleteAll()
         }
 
         // Build ID mapping for providers/models/groups/keys

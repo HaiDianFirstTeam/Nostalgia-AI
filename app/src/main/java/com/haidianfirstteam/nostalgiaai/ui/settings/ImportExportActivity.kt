@@ -221,7 +221,7 @@ class ImportExportActivity : AppCompatActivity() {
                     ToastUtil.show(this, "请选择 .json 文件")
                     return
                 }
-                val options = arrayOf("追加（推荐）", "覆盖（未实现）")
+                val options = arrayOf("追加（推荐）", "覆盖")
                 MaterialAlertDialogBuilder(this)
                     .setTitle("导入方式")
                     .setItems(options) { _, which ->
@@ -232,7 +232,7 @@ class ImportExportActivity : AppCompatActivity() {
                                     repo.importFromUri(uri, overwrite)
                                 }
                                 MaterialAlertDialogBuilder(this@ImportExportActivity)
-                                    .setMessage("导入完成（部分字段需后续完善映射）")
+                                    .setMessage("导入完成")
                                     .setPositiveButton("确定", null)
                                     .show()
                             } catch (e: Exception) {
