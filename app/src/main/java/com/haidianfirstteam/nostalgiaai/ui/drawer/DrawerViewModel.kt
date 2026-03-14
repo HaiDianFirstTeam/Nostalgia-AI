@@ -19,8 +19,15 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newConversation() {
         viewModelScope.launch {
-            val id = repo.createConversation("新对话")
+            // Name new conversation by current time to avoid duplicates like "新对话".
+            val id = repo.createConversationWithTimeTitle()
             _openConversationId.value = id
+        }
+    }
+
+    fun deleteIfEmpty(conversationId: Long) {
+        viewModelScope.launch {
+            repo.deleteIfEmpty(conversationId)
         }
     }
 
