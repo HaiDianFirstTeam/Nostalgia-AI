@@ -309,6 +309,10 @@ class ModelsActivity : AppCompatActivity() {
             if (rows.getOrNull(to) is ModelRow.GroupHeader || rows.getOrNull(to) is ModelRow.UngroupedHeader) {
                 to = (to + 1).coerceAtMost(rows.size)
             }
+            // After removal, indices shift.
+            if (fromPosition < to) {
+                to = (to - 1).coerceAtLeast(0)
+            }
             val item = rows.removeAt(fromPosition)
             rows.add(to, item)
             notifyItemMoved(fromPosition, to)

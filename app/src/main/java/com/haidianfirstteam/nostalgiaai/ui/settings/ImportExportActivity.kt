@@ -140,16 +140,11 @@ class ImportExportActivity : AppCompatActivity() {
     }
 
     private fun pickImportFile() {
+        // Android 4.x file pickers are often buggy with MIME filters and CATEGORY_OPENABLE.
+        // Use a broad picker then validate by extension/content after selection.
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-            try {
-                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/json", "text/plain"))
-            } catch (_: Exception) {
-                // ignore
-            }
-            // Some Android 4.x file pickers don't support MIME filtering well.
-            // We will filter by extension after selection.
+            addCategory(Intent.CATEGORY_DEFAULT)
         }
         startActivityForResult(intent, REQ_IMPORT)
     }

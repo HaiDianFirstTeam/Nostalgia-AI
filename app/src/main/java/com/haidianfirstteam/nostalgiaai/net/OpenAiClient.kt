@@ -19,7 +19,9 @@ class OpenAiClient(
     private val apiKey: String,
     private val gson: Gson = Gson()
 ) {
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    private val client: OkHttpClient = LegacyTls.enableTls12OnPreLollipop(
+        OkHttpClient.Builder()
+    )
         // OkHttp 3.12 compatible with Android 4.4.2
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)

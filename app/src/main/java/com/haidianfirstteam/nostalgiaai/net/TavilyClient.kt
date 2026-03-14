@@ -14,7 +14,9 @@ class TavilyClient(
     private val apiKey: String,
     private val gson: Gson = Gson()
 ) {
-    private val client = OkHttpClient.Builder()
+    private val client = LegacyTls.enableTls12OnPreLollipop(
+        OkHttpClient.Builder()
+    )
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
