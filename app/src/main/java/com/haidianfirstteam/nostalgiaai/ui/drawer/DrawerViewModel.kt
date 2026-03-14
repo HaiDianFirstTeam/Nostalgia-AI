@@ -32,7 +32,9 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openConversation(id: Long) {
-        _openConversationId.value = id
+        if (_openConversationId.value != id) {
+            _openConversationId.value = id
+        }
     }
 
     fun renameConversation(id: Long, title: String) {

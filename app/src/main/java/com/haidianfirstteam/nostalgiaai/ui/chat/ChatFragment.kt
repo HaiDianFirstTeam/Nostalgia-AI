@@ -188,7 +188,9 @@ class ChatFragment : Fragment() {
         drawerVm.openConversationId.observe(viewLifecycleOwner) { id ->
             // Before switching, drop the previous empty conversation.
             val prev = chatVm.conversationId.value
-            if (prev != null) {
+            // NOTE: openConversationId may re-emit the SAME id (e.g. after rotation / re-create).
+            // Never delete the conversation we are opening.
+            if (prev != null && prev != id) {
                 drawerVm.deleteIfEmpty(prev)
             }
             chatVm.loadConversation(id)
