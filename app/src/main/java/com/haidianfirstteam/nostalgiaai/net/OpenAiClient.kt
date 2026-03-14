@@ -12,22 +12,13 @@ import okhttp3.RequestBody
 import java.io.IOException
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
 
 class OpenAiClient(
     private val baseUrl: String,
     private val apiKey: String,
-    private val gson: Gson = Gson()
+    private val gson: Gson = Gson(),
+    private val client: OkHttpClient = HttpClients.openAi()
 ) {
-    private val client: OkHttpClient = LegacyTls.enableTls12OnPreLollipop(
-        OkHttpClient.Builder()
-    )
-        // OkHttp 3.12 compatible with Android 4.4.2
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .build()
-
     @Throws(IOException::class)
     fun chatCompletions(req: OpenAiChatRequest): OpenAiChatResponse {
         // IMPORTANT: Do NOT auto-append "/v1". Users may provide baseUrl with or without it.

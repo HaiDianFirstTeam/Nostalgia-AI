@@ -7,21 +7,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 class TavilyClient(
     private val baseUrl: String,
     private val apiKey: String,
-    private val gson: Gson = Gson()
+    private val gson: Gson = Gson(),
+    private val client: OkHttpClient = HttpClients.tavily()
 ) {
-    private val client = LegacyTls.enableTls12OnPreLollipop(
-        OkHttpClient.Builder()
-    )
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .build()
-
     @Throws(IOException::class)
     fun search(query: String, maxResults: Int): TavilySearchResponse {
         val url = normalizeBaseUrl(baseUrl) + "/search"

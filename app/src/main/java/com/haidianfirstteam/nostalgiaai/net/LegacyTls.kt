@@ -20,24 +20,15 @@ import org.conscrypt.Conscrypt
  */
 object LegacyTls {
 
+    @Volatile
+    private var conscryptInstalled: Boolean = false
+
     fun enableTls12OnPreLollipop(builder: OkHttpClient.Builder): OkHttpClient.Builder {
         if (Build.VERSION.SDK_INT >= 21) return builder
 
         try {
             // Install a modern TLS provider on legacy devices.
-            val conscryptProvider = try {
-                Conscrypt.newProvider()
-            } catch (_: Throwable) {
-                null
-            }
-            try {
-                if (conscryptProvider != null) {
-                    // Insert at highest priority.
-                    Security.insertProviderAt(conscryptProvider, 1)
-                }
-            } catch (_: Throwable) {
-                // ignore
-            }
+            val conscryptProvider = ensureConscryptInstalled()
 
             val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
             trustManagerFactory.init(null as KeyStore?)
@@ -92,10 +83,44 @@ object LegacyTls {
                 .cipherSuites(*commonSuites)
                 .build()
             builder.connectionSpecs(listOf(modern, compat, ConnectionSpec.CLEARTEXT))
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // ignore; fallback to default
         }
         return builder
+    }
+
+    private fun ensureConscryptInstalled(): java.security.Provider? {
+        if (conscryptInstalled) {
+            return try {
+                Security.getProvider("Conscrypt")
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        synchronized(this) {
+            if (conscryptInstalled) {
+                return try {
+                    Security.getProvider("Conscrypt")
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+            val provider = try {
+                Conscrypt.newProvider()
+            } catch (_: Throwable) {
+                null
+            }
+            if (provider != null) {
+                try {
+                    // Insert at highest priority.
+                    Security.insertProviderAt(provider, 1)
+                } catch (_: Throwable) {
+                    // ignore
+                }
+            }
+            conscryptInstalled = true
+            return provider
+        }
     }
 
     private class PatchedTlsSocketFactory(private val delegate: SSLSocketFactory) : SSLSocketFactory() {
