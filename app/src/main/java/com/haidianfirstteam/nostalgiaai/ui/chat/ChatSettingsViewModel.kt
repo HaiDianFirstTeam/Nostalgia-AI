@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.viewModelScope
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.data.entities.GroupProviderEntity
@@ -30,12 +31,39 @@ class ChatSettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val _selected = MutableLiveData<ChatTargetUi?>()
     val selected: LiveData<ChatTargetUi?> = _selected
 
+    // Observe DB changes so targets update in real time (no need to start a new conversation).
+    private val providersLD = db.providers().observeAll()
+    private val modelsLD = db.models().observeAll()
+    private val groupsLD = db.modelGroups().observeAll()
+    private val groupProvidersLD = db.groupProviders().observeAll()
+
+    private val dbChanges = MediatorLiveData<Unit>().apply {
+        fun ping() { value = Unit }
+        addSource(providersLD) { ping() }
+        addSource(modelsLD) { ping() }
+        addSource(groupsLD) { ping() }
+        addSource(groupProvidersLD) { ping() }
+    }
+
+    init {
+        dbChanges.observeForever {
+            // Rebuild targets on any change.
+            refresh()
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { buildTargets() }
             _targets.value = list
-            if (_selected.value == null && list.isNotEmpty()) {
-                _selected.value = list[0]
+
+            // Preserve selection when possible.
+            val cur = _selected.value
+            if (cur == null) {
+                if (list.isNotEmpty()) _selected.value = list[0]
+            } else {
+                val idx = list.indexOfFirst { it.target == cur.target }
+                _selected.value = if (idx >= 0) list[idx] else list.firstOrNull()
             }
         }
     }
@@ -97,5 +125,14 @@ class ChatSettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         return out
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Avoid leaking observer.
+        dbChanges.removeSource(providersLD)
+        dbChanges.removeSource(modelsLD)
+        dbChanges.removeSource(groupsLD)
+        dbChanges.removeSource(groupProvidersLD)
     }
 }

@@ -22,6 +22,21 @@
             android:title="Tavily 联网搜索" />
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="输出">
+        <ListPreference
+            android:key="stream_mode"
+            android:title="流式输出"
+            android:entries="@array/stream_mode_entries"
+            android:entryValues="@array/stream_mode_values"
+            android:defaultValue="on" />
+
+        <EditTextPreference
+            android:key="stream_compat_interval_ms"
+            android:title="兼容流式刷新间隔(ms)"
+            android:summary="兼容流式下每隔 N 毫秒刷新一次，减少老设备卡死"
+            android:defaultValue="500" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="数据">
         <Preference
             android:key="import_export"

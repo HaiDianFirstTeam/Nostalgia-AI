@@ -12,6 +12,9 @@ class SettingsRepository(
     companion object {
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TAVILY_BASE_URL = "tavily_base_url"
+
+        const val KEY_STREAM_MODE = "stream_mode" // off | on | compat
+        const val KEY_STREAM_COMPAT_INTERVAL_MS = "stream_compat_interval_ms" // e.g. 500
     }
 
     fun getThemeModeBlocking(): Int = runBlocking {
@@ -40,5 +43,22 @@ class SettingsRepository(
 
     fun setTavilyBaseUrlBlocking(url: String) = runBlocking {
         db.appSettings().put(AppSettingEntity(KEY_TAVILY_BASE_URL, url.trim()))
+    }
+
+    fun getStreamModeBlocking(): String = runBlocking {
+        db.appSettings().get(KEY_STREAM_MODE)?.value ?: "on"
+    }
+
+    fun setStreamModeBlocking(mode: String) = runBlocking {
+        db.appSettings().put(AppSettingEntity(KEY_STREAM_MODE, mode.trim()))
+    }
+
+    fun getCompatStreamIntervalMsBlocking(): Long = runBlocking {
+        val raw = db.appSettings().get(KEY_STREAM_COMPAT_INTERVAL_MS)?.value
+        raw?.toLongOrNull()?.coerceAtLeast(50L) ?: 500L
+    }
+
+    fun setCompatStreamIntervalMsBlocking(ms: Long) = runBlocking {
+        db.appSettings().put(AppSettingEntity(KEY_STREAM_COMPAT_INTERVAL_MS, ms.coerceAtLeast(50L).toString()))
     }
 }

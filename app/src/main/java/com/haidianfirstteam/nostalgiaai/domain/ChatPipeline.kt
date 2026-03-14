@@ -11,6 +11,7 @@ import com.haidianfirstteam.nostalgiaai.net.OpenAiMessage
 import com.haidianfirstteam.nostalgiaai.net.TavilyClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 
 /**
  * 负责把：历史消息 + 联网搜索 + 附件（多模态/解析文本） -> OpenAI 兼容请求
@@ -25,7 +26,17 @@ class ChatPipeline(
         val text: String,
         val routedProviderId: Long? = null,
         val routedApiKeyId: Long? = null,
-        val routedModelId: Long? = null
+        val routedModelId: Long? = null,
+        val webLinks: List<WebLink> = emptyList()
+    )
+
+    enum class StreamMode {
+        OFF, ON, COMPAT
+    }
+
+    data class WebLink(
+        val title: String,
+        val url: String
     )
 
     private val directKeyPicker = DirectKeyPicker(db)
@@ -45,9 +56,10 @@ class ChatPipeline(
 
             val webEnabled = userMessage.webSearchEnabled
             val webCount = userMessage.webSearchCount
-            val webContext = if (webEnabled) {
-                fetchWebContext(userMessage.content, webCount)
+            val web = if (webEnabled) {
+                fetchWeb(userMessage.content, webCount)
             } else null
+            val webContext = web?.context
 
             when (userMessage.targetType) {
                 "direct" -> {
@@ -70,6 +82,7 @@ class ChatPipeline(
                             modelName = model.modelName,
                             history = history,
                             webContext = webContext,
+                            webLinks = web?.links.orEmpty(),
                             userAttachments = attachments,
                             isMultimodalModel = model.multimodal
                         )
@@ -84,6 +97,7 @@ class ChatPipeline(
                             modelName = model.modelName,
                             history = history,
                             webContext = webContext,
+                            webLinks = web?.links.orEmpty(),
                             userAttachments = attachments,
                             isMultimodalModel = model.multimodal
                         )
@@ -119,6 +133,7 @@ class ChatPipeline(
                             modelName = model.modelName,
                             history = history,
                             webContext = webContext,
+                            webLinks = web?.links.orEmpty(),
                             userAttachments = attachments,
                             isMultimodalModel = model.multimodal
                         )
@@ -139,6 +154,7 @@ class ChatPipeline(
                             modelName = model.modelName,
                             history = history,
                             webContext = webContext,
+                            webLinks = web?.links.orEmpty(),
                             userAttachments = attachments,
                             isMultimodalModel = model.multimodal
                         )
@@ -160,6 +176,200 @@ class ChatPipeline(
         }
     }
 
+    data class StreamHandle(
+        val call: Call,
+        val routedProviderId: Long? = null,
+        val routedApiKeyId: Long? = null,
+        val routedModelId: Long? = null
+    )
+
+    /**
+     * Streaming run: best-effort.
+     * Caller receives partial text via callbacks.
+     */
+    suspend fun runStream(
+        userMessage: MessageEntity,
+        mode: StreamMode,
+        compatIntervalMs: Long,
+        onStart: (Output) -> Unit,
+        onDeltaText: (String) -> Unit,
+        onDone: (Output) -> Unit,
+        onError: (String) -> Unit
+    ): StreamHandle = withContext(Dispatchers.IO) {
+
+        // In OFF mode, caller should use runOnce().
+        // Keep runStream() for ON/COMPAT.
+        val intervalMs = if (mode == StreamMode.COMPAT) compatIntervalMs.coerceAtLeast(50L) else 0L
+
+        var lastEmit = 0L
+        val buffer = StringBuilder()
+        fun emitBuffered(force: Boolean = false) {
+            if (buffer.isEmpty()) return
+            if (intervalMs <= 0) {
+                onDeltaText(buffer.toString())
+                buffer.setLength(0)
+                return
+            }
+            val now = System.currentTimeMillis()
+            if (force || now - lastEmit >= intervalMs) {
+                onDeltaText(buffer.toString())
+                buffer.setLength(0)
+                lastEmit = now
+            }
+        }
+
+        val convId = userMessage.conversationId
+        val history = db.messages().listByConversation(convId)
+        val attachments = attachmentStore.loadForMessage(userMessage.id)
+
+        val webEnabled = userMessage.webSearchEnabled
+        val webCount = userMessage.webSearchCount
+        val web = if (webEnabled) fetchWeb(userMessage.content, webCount) else null
+        val webContext = web?.context
+        val webLinks = web?.links.orEmpty()
+
+        fun buildMessages(isMultimodalModel: Boolean): List<OpenAiMessage> {
+            val messages = ArrayList<OpenAiMessage>()
+            if (!webContext.isNullOrBlank()) {
+                messages.add(OpenAiMessage("system", "联网搜索结果：\n${webContext}"))
+            }
+            val currentUserId = history.lastOrNull { it.role == "user" }?.id
+            history.forEach { msg ->
+                if (msg.id == currentUserId && attachments.isNotEmpty()) {
+                    if (isMultimodalModel) {
+                        val parts = buildMultimodalParts(msg.content, attachments)
+                        messages.add(OpenAiMessage("user", parts))
+                    } else {
+                        val text = buildTextWithExtractedDocs(msg.content, attachments)
+                        messages.add(OpenAiMessage("user", text))
+                    }
+                } else {
+                    messages.add(OpenAiMessage(msg.role, msg.content))
+                }
+            }
+            return messages
+        }
+
+        // Resolve routing (same as runOnce but returning first workable provider/key)
+        when (userMessage.targetType) {
+            "direct" -> {
+                val providerId = userMessage.targetProviderId ?: run {
+                    onError("missing providerId")
+                    throw IllegalStateException("missing providerId")
+                }
+                val modelId = userMessage.targetModelId ?: run {
+                    onError("missing modelId")
+                    throw IllegalStateException("missing modelId")
+                }
+                val provider = db.providers().getById(providerId) ?: run {
+                    onError("provider not found")
+                    throw IllegalStateException("provider not found")
+                }
+                val model = db.models().getById(modelId) ?: run {
+                    onError("model not found")
+                    throw IllegalStateException("model not found")
+                }
+                val keys = directKeyPicker.pickKeys(providerId)
+                if (keys.isEmpty()) {
+                    onError("no enabled api keys")
+                    throw IllegalStateException("no enabled api keys")
+                }
+
+                val out0 = Output(text = "", routedProviderId = providerId, routedApiKeyId = keys[0].id, routedModelId = modelId, webLinks = webLinks)
+                onStart(out0)
+
+                val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
+                val call = client.chatCompletionsStream(
+                    OpenAiChatRequest(
+                        model = model.modelName,
+                        messages = buildMessages(model.multimodal),
+                        temperature = 0.7,
+                        stream = true
+                    )
+                ) { chunk ->
+                    when {
+                        chunk.done -> {
+                            emitBuffered(force = true)
+                            onDone(out0)
+                        }
+                        chunk.error != null -> {
+                            emitBuffered(force = true)
+                            onError(chunk.error)
+                        }
+                        chunk.deltaText != null -> {
+                            if (intervalMs > 0) {
+                                buffer.append(chunk.deltaText)
+                                emitBuffered(force = false)
+                            } else {
+                                onDeltaText(chunk.deltaText)
+                            }
+                        }
+                    }
+                }
+                return@withContext StreamHandle(call, providerId, keys[0].id, modelId)
+            }
+
+            "group" -> {
+                val groupId = userMessage.targetGroupId ?: run {
+                    onError("missing groupId")
+                    throw IllegalStateException("missing groupId")
+                }
+                val ordered = providerPriorityManager.orderedProvidersForGroup(groupId)
+                if (ordered.isEmpty()) {
+                    onError("group has no providers configured")
+                    throw IllegalStateException("group has no providers configured")
+                }
+                // pick first provider with keys
+                for (gp in ordered) {
+                    val provider = db.providers().getById(gp.providerId) ?: continue
+                    val model = db.models().getById(gp.modelId) ?: continue
+                    val keys = directKeyPicker.pickKeys(gp.providerId)
+                    if (keys.isEmpty()) continue
+
+                    val out0 = Output(text = "", routedProviderId = gp.providerId, routedApiKeyId = keys[0].id, routedModelId = gp.modelId, webLinks = webLinks)
+                    onStart(out0)
+                    val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
+                    val call = client.chatCompletionsStream(
+                        OpenAiChatRequest(
+                            model = model.modelName,
+                            messages = buildMessages(model.multimodal),
+                            temperature = 0.7,
+                            stream = true
+                        )
+                    ) { chunk ->
+                        when {
+                            chunk.done -> {
+                                emitBuffered(force = true)
+                                onDone(out0)
+                            }
+                            chunk.error != null -> {
+                                emitBuffered(force = true)
+                                onError(chunk.error)
+                            }
+                            chunk.deltaText != null -> {
+                                if (intervalMs > 0) {
+                                    buffer.append(chunk.deltaText)
+                                    emitBuffered(force = false)
+                                } else {
+                                    onDeltaText(chunk.deltaText)
+                                }
+                            }
+                        }
+                    }
+                    return@withContext StreamHandle(call, gp.providerId, keys[0].id, gp.modelId)
+                }
+
+                onError("all providers failed")
+                throw IllegalStateException("all providers failed")
+            }
+
+            else -> {
+                onError("targetType not set")
+                throw IllegalStateException("targetType not set")
+            }
+        }
+    }
+
     private fun callOpenAi(
         providerId: Long,
         apiKeyId: Long,
@@ -169,6 +379,7 @@ class ChatPipeline(
         modelName: String,
         history: List<MessageEntity>,
         webContext: String?,
+        webLinks: List<WebLink>,
         userAttachments: List<AttachmentEntity>,
         isMultimodalModel: Boolean
     ): Result<Output> {
@@ -213,7 +424,8 @@ class ChatPipeline(
                         text = text?.toString() ?: "",
                         routedProviderId = providerId,
                         routedApiKeyId = apiKeyId,
-                        routedModelId = modelId
+                        routedModelId = modelId,
+                        webLinks = webLinks
                     )
                 )
             }
@@ -276,16 +488,31 @@ class ChatPipeline(
         return parts
     }
 
-    private suspend fun fetchWebContext(query: String, maxResults: Int): String? {
+    private data class WebFetch(
+        val context: String,
+        val links: List<WebLink>
+    )
+
+    private suspend fun fetchWeb(query: String, maxResults: Int): WebFetch? {
         return try {
             val baseUrl = db.appSettings().get("tavily_base_url")?.value ?: "https://api.tavily.com"
             val key = tavilyKeyRouter.pickOne() ?: return null
             val client = TavilyClient(baseUrl, key.apiKey)
             val resp = client.search(query, maxResults)
             if (resp.error != null) return null
-            resp.results.joinToString("\n") { r ->
+
+            val links = resp.results.mapNotNull { r ->
+                val url = (r.url ?: "").trim()
+                if (url.isBlank()) return@mapNotNull null
+                val title = (r.title ?: url).trim()
+                WebLink(title = title, url = url)
+            }
+
+            val ctx = resp.results.joinToString("\n") { r ->
                 "- ${r.title ?: ""} ${r.url ?: ""}\n  ${r.content ?: ""}".trim()
             }
+
+            WebFetch(context = ctx, links = links)
         } catch (e: Exception) {
             null
         }

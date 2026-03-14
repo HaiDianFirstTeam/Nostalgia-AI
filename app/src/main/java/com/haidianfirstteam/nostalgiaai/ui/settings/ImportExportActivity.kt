@@ -2,6 +2,8 @@ package com.haidianfirstteam.nostalgiaai.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.os.Bundle
 import android.widget.CheckBox
@@ -12,6 +14,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.export.ImportExportRepository
 import androidx.core.view.children
+import com.haidianfirstteam.nostalgiaai.util.ToastUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,19 +49,21 @@ class ImportExportActivity : AppCompatActivity() {
     }
 
     private fun showChoice() {
-        val options = arrayOf("导出 JSON", "导入 JSON")
+        val options = arrayOf("导出到文件", "导出到剪贴板", "从文件导入", "从剪贴板导入")
         MaterialAlertDialogBuilder(this)
             .setTitle("导入/导出")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> showExportDialog()
-                    1 -> pickImportFile()
+                    0 -> showExportDialog(toClipboard = false)
+                    1 -> showExportDialog(toClipboard = true)
+                    2 -> pickImportFile()
+                    3 -> showImportFromClipboardDialog()
                 }
             }
             .show()
     }
 
-    private fun showExportDialog() {
+    private fun showExportDialog(toClipboard: Boolean) {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24, 16, 24, 16)
@@ -92,10 +97,37 @@ class ImportExportActivity : AppCompatActivity() {
                     .map { it.tag as ImportExportRepository.Section }
                     .toSet()
                 pendingExportSections = selected
-                pickExportFile()
+                if (toClipboard) {
+                    exportToClipboard()
+                } else {
+                    pickExportFile()
+                }
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun exportToClipboard() {
+        val app = application as NostalgiaApp
+        val repo = ImportExportRepository(this, app.db)
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val json = withContext(Dispatchers.IO) {
+                    repo.exportToJson(pendingExportSections)
+                }
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("nostalgia-ai-export", json))
+                MaterialAlertDialogBuilder(this@ImportExportActivity)
+                    .setMessage("已导出到剪贴板")
+                    .setPositiveButton("确定", null)
+                    .show()
+            } catch (e: Exception) {
+                MaterialAlertDialogBuilder(this@ImportExportActivity)
+                    .setMessage("导出失败：${e.message}")
+                    .setPositiveButton("确定", null)
+                    .show()
+            }
+        }
     }
 
     private fun pickExportFile() {
@@ -108,11 +140,48 @@ class ImportExportActivity : AppCompatActivity() {
     }
 
     private fun pickImportFile() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/json"
+            type = "*/*"
+            try {
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/json", "text/plain"))
+            } catch (_: Exception) {
+                // ignore
+            }
+            // Some Android 4.x file pickers don't support MIME filtering well.
+            // We will filter by extension after selection.
         }
         startActivityForResult(intent, REQ_IMPORT)
+    }
+
+    private fun showImportFromClipboardDialog() {
+        val input = android.widget.EditText(this)
+        input.hint = "粘贴导入的 JSON"
+        MaterialAlertDialogBuilder(this)
+            .setTitle("从剪贴板导入")
+            .setView(input)
+            .setPositiveButton("导入") { _, _ ->
+                val text = input.text?.toString() ?: ""
+                if (text.trim().isEmpty()) return@setPositiveButton
+                val app = application as NostalgiaApp
+                val repo = ImportExportRepository(this, app.db)
+                CoroutineScope(Dispatchers.Main).launch {
+                    try {
+                        withContext(Dispatchers.IO) { repo.importFromJson(text, overwrite = false) }
+                        MaterialAlertDialogBuilder(this@ImportExportActivity)
+                            .setMessage("导入完成")
+                            .setPositiveButton("确定", null)
+                            .show()
+                    } catch (e: Exception) {
+                        MaterialAlertDialogBuilder(this@ImportExportActivity)
+                            .setMessage("导入失败：${e.message}")
+                            .setPositiveButton("确定", null)
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     @Deprecated("Deprecated in Java")
@@ -130,7 +199,7 @@ class ImportExportActivity : AppCompatActivity() {
                             repo.exportToUri(pendingExportSections, uri)
                         }
                         MaterialAlertDialogBuilder(this@ImportExportActivity)
-                            .setMessage("导出完成")
+                            .setMessage("导出完成\n位置: $uri")
                             .setPositiveButton("确定", null)
                             .show()
                     } catch (e: Exception) {
@@ -142,6 +211,16 @@ class ImportExportActivity : AppCompatActivity() {
                 }
             }
             REQ_IMPORT -> {
+                // Filter non-json files on legacy pickers
+                val name = try {
+                    com.haidianfirstteam.nostalgiaai.util.FileUtil.getPickedFile(this, uri).displayName
+                } catch (_: Exception) {
+                    null
+                }
+                if (name != null && !name.lowercase().endsWith(".json")) {
+                    ToastUtil.show(this, "请选择 .json 文件")
+                    return
+                }
                 val options = arrayOf("追加（推荐）", "覆盖（未实现）")
                 MaterialAlertDialogBuilder(this)
                     .setTitle("导入方式")

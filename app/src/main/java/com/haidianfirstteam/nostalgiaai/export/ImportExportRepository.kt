@@ -40,7 +40,12 @@ class ImportExportRepository(
 
         val settings = if (sections.contains(Section.SETTINGS)) {
             // Minimal: export known keys
-            val keysToExport = listOf("theme_mode", "tavily_base_url")
+            val keysToExport = listOf(
+                "theme_mode",
+                "tavily_base_url",
+                "stream_mode",
+                "stream_compat_interval_ms"
+            )
             val map = LinkedHashMap<String, String>()
             for (k in keysToExport) {
                 val v = db.appSettings().get(k)?.value
@@ -68,6 +73,16 @@ class ImportExportRepository(
         )
     }
 
+    suspend fun exportToJson(sections: Set<Section>): String = withContext(Dispatchers.IO) {
+        val bundle = export(sections)
+        gson.toJson(bundle)
+    }
+
+    suspend fun importFromJson(json: String, overwrite: Boolean) = withContext(Dispatchers.IO) {
+        val bundle = gson.fromJson(json, ExportBundle::class.java)
+        importBundle(bundle, overwrite)
+    }
+
     suspend fun exportToUri(sections: Set<Section>, uri: Uri) = withContext(Dispatchers.IO) {
         val bundle = export(sections)
         val json = gson.toJson(bundle)
@@ -81,10 +96,12 @@ class ImportExportRepository(
             BufferedReader(InputStreamReader(ins)).readText()
         } ?: throw IllegalStateException("无法读取文件")
         val bundle = gson.fromJson(json, ExportBundle::class.java)
+        importBundle(bundle, overwrite)
+    }
 
-        // Import strategy: if overwrite -> delete & insert; else upsert by id.
-        // To keep v1 simple: we just insert rows with REPLACE by primary key where possible.
-
+    private fun importBundle(bundle: ExportBundle, overwrite: Boolean) {
+        // Import strategy: if overwrite -> delete & insert; else upsert-like behavior.
+        // v1 minimal: overwrite is not implemented.
         if (overwrite) {
             // NOTE: full wipe is heavy; v1 minimal: not implemented.
         }
@@ -150,8 +167,7 @@ class ImportExportRepository(
         // Settings
         bundle.settings.forEach { (k, v) -> db.appSettings().put(AppSettingEntity(k, v)) }
 
-        // Conversations + messages + attachments: keep original timestamps; remap conversationId.
-        // Strategy: create conversations first (match by title+createdAt), then messages by (conversationId, createdAt, role, content prefix).
+        // Conversations + messages + attachments
         if (bundle.conversations.isNotEmpty()) {
             val convIdMap = HashMap<Long, Long>()
             val existingConvs = db.conversations().listAll()
@@ -167,7 +183,6 @@ class ImportExportRepository(
                 convIdMap[c.id] = newId
             }
 
-            // Messages
             val msgIdMap = HashMap<Long, Long>()
             val existingMsgs = db.messages().listAll()
             for (m in bundle.messages) {
@@ -195,7 +210,6 @@ class ImportExportRepository(
                 msgIdMap[m.id] = newId
             }
 
-            // Attachments
             for (a in bundle.attachments) {
                 val newMsgId = msgIdMap[a.messageId] ?: continue
                 db.attachments().insertAll(
@@ -212,6 +226,7 @@ class ImportExportRepository(
             }
         }
     }
+
 }
 
 private fun ProviderEntity.toJson() = ProviderJson(id, name, baseUrl)

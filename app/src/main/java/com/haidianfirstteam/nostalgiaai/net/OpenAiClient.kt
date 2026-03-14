@@ -2,10 +2,15 @@ package com.haidianfirstteam.nostalgiaai.net
 
 import com.google.gson.Gson
 import okhttp3.MediaType
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.Response
 import java.io.IOException
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
 class OpenAiClient(
@@ -49,6 +54,97 @@ class OpenAiClient(
             }
             return gson.fromJson(text, OpenAiChatResponse::class.java)
         }
+    }
+
+    data class StreamChunk(
+        val deltaText: String? = null,
+        val done: Boolean = false,
+        val error: String? = null
+    )
+
+    /**
+     * OpenAI-compatible streaming chat completions (SSE).
+     * - Reads lines starting with "data:"
+     * - Stops on "[DONE]"
+     * - For each JSON payload, extracts choices[].delta.content (best-effort)
+     */
+    @Throws(IOException::class)
+    fun chatCompletionsStream(
+        req: OpenAiChatRequest,
+        onChunk: (StreamChunk) -> Unit
+    ): Call {
+        val url = normalizeBaseUrl(baseUrl) + "/chat/completions"
+        val json = gson.toJson(req.copy(stream = true))
+        val body = RequestBody.create(MediaType.parse("application/json"), json)
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build()
+
+        val call = client.newCall(request)
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // If cancelled, treat as done (caller can mark interrupted).
+                if (call.isCanceled()) {
+                    onChunk(StreamChunk(done = true))
+                    return
+                }
+                onChunk(StreamChunk(error = e.message))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use { resp ->
+                    if (!resp.isSuccessful) {
+                        val text = try {
+                            resp.body()?.string() ?: ""
+                        } catch (_: Exception) {
+                            ""
+                        }
+                        onChunk(StreamChunk(error = "HTTP ${resp.code()} ${resp.message()}\n$text"))
+                        return
+                    }
+                    val stream = resp.body()?.byteStream() ?: run {
+                        onChunk(StreamChunk(error = "empty response body"))
+                        return
+                    }
+                    val reader = BufferedReader(InputStreamReader(stream, Charsets.UTF_8))
+                    try {
+                        while (true) {
+                            val line = reader.readLine() ?: break
+                            val t = line.trim()
+                            if (t.isEmpty()) continue
+                            if (!t.startsWith("data:")) continue
+                            val payload = t.removePrefix("data:").trim()
+                            if (payload == "[DONE]") {
+                                onChunk(StreamChunk(done = true))
+                                break
+                            }
+                            try {
+                                val obj = gson.fromJson(payload, java.util.Map::class.java)
+                                val choices = obj["choices"] as? java.util.List<*>
+                                val first = choices?.firstOrNull() as? java.util.Map<*, *>
+                                val delta = first?.get("delta") as? java.util.Map<*, *>
+                                val content = delta?.get("content") as? String
+                                if (!content.isNullOrEmpty()) {
+                                    onChunk(StreamChunk(deltaText = content))
+                                }
+                            } catch (_: Exception) {
+                                // ignore malformed chunks
+                            }
+                        }
+                    } catch (_: IOException) {
+                        if (call.isCanceled()) {
+                            onChunk(StreamChunk(done = true))
+                        } else {
+                            onChunk(StreamChunk(error = "stream read failed"))
+                        }
+                    }
+                }
+            }
+        })
+        return call
     }
 
     private fun normalizeBaseUrl(raw: String): String {

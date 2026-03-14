@@ -26,7 +26,7 @@ class TavilyClient(
         val req = TavilySearchRequest(
             apiKey = apiKey,
             query = query,
-            maxResults = maxResults
+            maxResults = maxResults.coerceAtLeast(1)
         )
         val json = gson.toJson(req)
         val body = RequestBody.create(MediaType.parse("application/json"), json)

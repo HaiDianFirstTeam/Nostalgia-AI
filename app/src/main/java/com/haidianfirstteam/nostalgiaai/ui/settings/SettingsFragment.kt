@@ -3,10 +3,15 @@ package com.haidianfirstteam.nostalgiaai.ui.settings
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.ListPreference
+import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.R
+import com.haidianfirstteam.nostalgiaai.data.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class SettingsFragment : PreferenceFragmentCompat() {
 
@@ -44,6 +49,24 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
         findPreference<Preference>("import_export")?.setOnPreferenceClickListener {
             startActivity(ImportExportActivity.newIntent(requireContext()))
+            true
+        }
+
+        // Streaming output settings
+        val streamPref = findPreference<ListPreference>(SettingsRepository.KEY_STREAM_MODE)
+        streamPref?.setOnPreferenceChangeListener { _, newValue ->
+            CoroutineScope(Dispatchers.IO).launch {
+                app.db.appSettings().put(com.haidianfirstteam.nostalgiaai.data.entities.AppSettingEntity(SettingsRepository.KEY_STREAM_MODE, (newValue as String)))
+            }
+            true
+        }
+        val intervalPref = findPreference<EditTextPreference>(SettingsRepository.KEY_STREAM_COMPAT_INTERVAL_MS)
+        intervalPref?.setOnPreferenceChangeListener { _, newValue ->
+            val raw = (newValue as String).trim()
+            val ms = raw.toLongOrNull()?.coerceAtLeast(50L) ?: 500L
+            CoroutineScope(Dispatchers.IO).launch {
+                app.db.appSettings().put(com.haidianfirstteam.nostalgiaai.data.entities.AppSettingEntity(SettingsRepository.KEY_STREAM_COMPAT_INTERVAL_MS, ms.toString()))
+            }
             true
         }
     }

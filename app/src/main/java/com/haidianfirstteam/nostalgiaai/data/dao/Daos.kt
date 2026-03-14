@@ -126,6 +126,9 @@ interface ModelDao {
     @Query("SELECT * FROM models")
     suspend fun listAll(): List<ModelEntity>
 
+    @Query("SELECT * FROM models")
+    fun observeAll(): LiveData<List<ModelEntity>>
+
     @Insert
     suspend fun insert(entity: ModelEntity): Long
 
@@ -188,6 +191,9 @@ interface GroupProviderDao {
 
     @Query("SELECT * FROM group_providers")
     suspend fun listAll(): List<GroupProviderEntity>
+
+    @Query("SELECT * FROM group_providers")
+    fun observeAll(): LiveData<List<GroupProviderEntity>>
 
     @Insert
     suspend fun insert(entity: GroupProviderEntity): Long

@@ -3,8 +3,12 @@ package com.haidianfirstteam.nostalgiaai.ui.chat
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.view.View
+import android.widget.LinearLayout
 import android.widget.EditText
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -81,6 +85,52 @@ class MessageAdapter(
 
     inner class VHAi(private val b: ItemMessageAiBinding) : RecyclerView.ViewHolder(b.root) {
         fun bind(item: MessageUi) {
+            // Web links chips (from Tavily)
+            val ctx = b.root.context
+            if (item.webLinks.isNotEmpty()) {
+                b.chipsScroll.visibility = View.VISIBLE
+                b.btnExpandChips.visibility = if (item.webLinks.size > 5) View.VISIBLE else View.GONE
+                b.btnExpandChips.rotation = 0f
+                var expanded = false
+
+                fun renderChips() {
+                    b.chipsContainer.removeAllViews()
+                    val list = if (!expanded && item.webLinks.size > 5) item.webLinks.take(5) else item.webLinks
+                    list.forEach { link ->
+                        val tv = android.widget.TextView(ctx)
+                        tv.text = link.title
+                        tv.setSingleLine(true)
+                        tv.ellipsize = android.text.TextUtils.TruncateAt.END
+                        tv.setPadding(24, 10, 24, 10)
+                        tv.setBackgroundResource(com.haidianfirstteam.nostalgiaai.R.drawable.bg_chip)
+                        // Keep default theme text color; border already tinted.
+                        val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                        lp.setMargins(0, 0, 12, 12)
+                        tv.layoutParams = lp
+                        tv.setOnClickListener {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.url))
+                                ctx.startActivity(intent)
+                            } catch (_: Exception) {
+                                // ignore
+                            }
+                        }
+                        b.chipsContainer.addView(tv)
+                    }
+                }
+
+                renderChips()
+                b.btnExpandChips.setOnClickListener {
+                    expanded = !expanded
+                    b.btnExpandChips.rotation = if (expanded) 180f else 0f
+                    renderChips()
+                }
+            } else {
+                b.chipsScroll.visibility = View.GONE
+                b.btnExpandChips.visibility = View.GONE
+                b.chipsContainer.removeAllViews()
+            }
+
             // Markdown render
             markwon.setMarkdown(b.tvContent, item.content)
             b.btnCopy.setOnClickListener { copy(b.root.context, item.content) }

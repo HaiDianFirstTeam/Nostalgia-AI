@@ -8,12 +8,47 @@
     android:paddingTop="6dp"
     android:paddingBottom="6dp">
 
-    <TextView
-        android:id="@+id/tvContent"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_bubble_ai"
-        android:textColor="?android:attr/textColorPrimary" />
+	<TextView
+		android:id="@+id/tvContent"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:background="@drawable/bg_bubble_ai"
+		android:textColor="?android:attr/textColorPrimary" />
+
+	<LinearLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:layout_marginTop="6dp"
+		android:orientation="vertical">
+
+		<HorizontalScrollView
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:visibility="gone"
+			android:id="@+id/chipsScroll"
+			android:scrollbars="none">
+
+			<LinearLayout
+				android:id="@+id/chipsContainer"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:orientation="horizontal"
+				android:paddingStart="4dp"
+				android:paddingEnd="4dp"
+				android:baselineAligned="false" />
+		</HorizontalScrollView>
+
+		<androidx.appcompat.widget.AppCompatImageButton
+			android:id="@+id/btnExpandChips"
+			android:layout_width="32dp"
+			android:layout_height="32dp"
+			android:layout_marginTop="2dp"
+			android:background="@android:color/transparent"
+			android:contentDescription="展开"
+			android:visibility="gone"
+			app:srcCompat="@android:drawable/arrow_down_float"
+			app:tint="?attr/colorControlNormal" />
+	</LinearLayout>
 
     <LinearLayout
         android:layout_width="wrap_content"

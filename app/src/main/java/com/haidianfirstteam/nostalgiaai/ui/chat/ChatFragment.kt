@@ -76,6 +76,11 @@ class ChatFragment : Fragment() {
         binding.rvMessages.adapter = adapter
 
         binding.btnSend.setOnClickListener {
+            // If in-flight: act as STOP
+            if (chatVm.requestState.value?.inFlight == true) {
+                chatVm.cancelRunningRequest()
+                return@setOnClickListener
+            }
             val text = binding.etInput.text?.toString() ?: ""
             binding.etInput.setText("")
 
@@ -165,6 +170,14 @@ class ChatFragment : Fragment() {
             binding.btnSend.isEnabled = !st.inFlight
             binding.btnUpload.isEnabled = !st.inFlight
             binding.btnCamera.isEnabled = !st.inFlight
+
+            if (st.inFlight) {
+                binding.btnSend.contentDescription = getString(com.haidianfirstteam.nostalgiaai.R.string.action_stop)
+                binding.btnSend.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            } else {
+                binding.btnSend.contentDescription = getString(com.haidianfirstteam.nostalgiaai.R.string.action_send)
+                binding.btnSend.setImageResource(com.haidianfirstteam.nostalgiaai.R.drawable.ic_send_24)
+            }
         }
 
         drawerVm.openConversationId.observe(viewLifecycleOwner) { id ->
@@ -342,7 +355,7 @@ class ChatFragment : Fragment() {
             .setPositiveButton("确定") { _, _ ->
                 webSearchEnabled = switch.isChecked
                 val c = countEt.text?.toString()?.toIntOrNull() ?: webSearchCount
-                webSearchCount = c.coerceIn(1, 10)
+                webSearchCount = if (c < 1) 1 else c
                 renderWebSearchButton()
             }
             .setNegativeButton("取消", null)
