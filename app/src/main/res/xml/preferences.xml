@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory android:title="外观">
         <ListPreference
@@ -8,6 +9,17 @@
             android:entries="@array/theme_entries"
             android:entryValues="@array/theme_values"
             android:defaultValue="system" />
+
+        <androidx.preference.SeekBarPreference
+            android:key="font_scale_x10"
+            android:title="字体缩放"
+            android:summary="1.0x"
+            android:defaultValue="10"
+            android:persistent="false"
+            app:min="5"
+            android:max="50"
+            app:seekBarIncrement="1"
+            app:showSeekBarValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="模型与联网搜索">

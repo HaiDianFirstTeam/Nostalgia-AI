@@ -39,11 +39,23 @@ class TavilyClient(
             .build()
 
         client.newCall(request).execute().use { resp ->
-            val text = resp.body()?.string() ?: ""
-            if (!resp.isSuccessful) {
-                return TavilySearchResponse(error = "HTTP ${resp.code()} ${resp.message()} $text")
+            val bodyResp = resp.body()
+            if (bodyResp == null) {
+                return TavilySearchResponse(error = "HTTP ${resp.code()} ${resp.message()} (empty body)")
             }
-            return gson.fromJson(text, TavilySearchResponse::class.java)
+            if (!resp.isSuccessful) {
+                val text = try {
+                    bodyResp.string()
+                } catch (_: Throwable) {
+                    ""
+                }
+                val short = if (text.length > 2000) text.substring(0, 2000) + "\n..." else text
+                return TavilySearchResponse(error = "HTTP ${resp.code()} ${resp.message()} $short")
+            }
+            // Avoid holding the whole response string in memory.
+            return bodyResp.charStream().use { reader ->
+                gson.fromJson(reader, TavilySearchResponse::class.java)
+            }
         }
     }
 

@@ -13,8 +13,26 @@ class SettingsRepository(
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TAVILY_BASE_URL = "tavily_base_url"
 
+        // Stored as integer string in tenths. Range: 5..50 => 0.5x..5.0x
+        const val KEY_FONT_SCALE_X10 = "font_scale_x10"
+
         const val KEY_STREAM_MODE = "stream_mode" // off | on | compat
         const val KEY_STREAM_COMPAT_INTERVAL_MS = "stream_compat_interval_ms" // e.g. 500
+    }
+
+    fun getFontScaleX10Blocking(): Int = runBlocking {
+        val raw = db.appSettings().get(KEY_FONT_SCALE_X10)?.value
+        raw?.toIntOrNull()?.coerceIn(5, 50) ?: 10
+    }
+
+    fun setFontScaleX10Blocking(x10: Int) = runBlocking {
+        val v = x10.coerceIn(5, 50)
+        db.appSettings().put(AppSettingEntity(KEY_FONT_SCALE_X10, v.toString()))
+    }
+
+    fun getFontScaleBlocking(): Float {
+        // Avoid float drift by deriving from x10.
+        return getFontScaleX10Blocking() / 10f
     }
 
     fun getThemeModeBlocking(): Int = runBlocking {

@@ -255,12 +255,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                 }
                             )
-                            } catch (e: Exception) {
+                            } catch (t: Throwable) {
+                                if (t is CancellationException) throw t
                                 // Never crash the app on stream setup failure.
                                 withContext(Dispatchers.IO) {
                                     val msg = db.messages().getById(assistantId) ?: return@withContext
                                     if (msg.content.isBlank()) {
-                                        db.messages().update(msg.copy(content = "请求失败：${e.message ?: "未知错误"}"))
+                                        val err = if (t is OutOfMemoryError) "内存不足（已自动降级/截断搜索结果）" else (t.message ?: "未知错误")
+                                        db.messages().update(msg.copy(content = "请求失败：${err}"))
                                     }
                                 }
                                 refreshMessages(convId)
@@ -275,12 +277,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             runningJob = job
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
+                if (t is CancellationException) return@launch
                 // Never crash UI on send.
                 _requestState.postValue(RequestState(false, ""))
                 // Best-effort: show error as a toast via application context.
+                val msg = if (t is OutOfMemoryError) "内存不足" else (t.message ?: "未知错误")
                 try {
-                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(getApplication(), "发送失败：${e.message ?: "未知错误"}")
+                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(getApplication(), "发送失败：${msg}")
                 } catch (_: Exception) {
                     // ignore
                 }

@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.EditText
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
+import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -13,7 +13,7 @@ import com.haidianfirstteam.nostalgiaai.databinding.ActivityListBinding
 import com.haidianfirstteam.nostalgiaai.ui.common.TwoLineAdapter
 import com.haidianfirstteam.nostalgiaai.ui.common.TwoLineItem
 
-class ProvidersActivity : AppCompatActivity() {
+class ProvidersActivity : BaseActivity() {
 
     private lateinit var binding: ActivityListBinding
     private val vm: ProvidersViewModel by viewModels()

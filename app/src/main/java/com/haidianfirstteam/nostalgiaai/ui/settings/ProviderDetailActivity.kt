@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.EditText
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
+import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -20,7 +20,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.TextView
 
-class ProviderDetailActivity : AppCompatActivity() {
+class ProviderDetailActivity : BaseActivity() {
 
     private lateinit var binding: ActivityListBinding
     private val vm: ProviderDetailViewModel by viewModels()

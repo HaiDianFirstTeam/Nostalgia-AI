@@ -43,6 +43,7 @@ class ImportExportRepository(
             val keysToExport = listOf(
                 "theme_mode",
                 "tavily_base_url",
+                "font_scale_x10",
                 "stream_mode",
                 "stream_compat_interval_ms"
             )

@@ -13,7 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.util.TypedValue
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
+import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -32,7 +32,7 @@ import com.haidianfirstteam.nostalgiaai.databinding.ActivityListBinding
  * Long-press provider row: drag into/out of groups.
  * Menu: three-dots button on right.
  */
-class ModelsActivity : AppCompatActivity() {
+class ModelsActivity : BaseActivity() {
 
     private lateinit var binding: ActivityListBinding
     private val vm: ModelsViewModel by viewModels()

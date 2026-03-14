@@ -8,7 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.CheckBox
 import android.widget.LinearLayout
-import androidx.appcompat.app.AppCompatActivity
+import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
@@ -20,7 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ImportExportActivity : AppCompatActivity() {
+class ImportExportActivity : BaseActivity() {
 
     private val REQ_EXPORT = 2001
     private val REQ_IMPORT = 2002

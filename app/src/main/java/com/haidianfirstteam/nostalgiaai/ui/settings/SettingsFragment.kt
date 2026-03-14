@@ -6,6 +6,7 @@ import androidx.preference.ListPreference
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.SeekBarPreference
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.R
 import com.haidianfirstteam.nostalgiaai.data.SettingsRepository
@@ -45,6 +46,36 @@ class SettingsFragment : PreferenceFragmentCompat() {
         findPreference<Preference>("import_export")?.setOnPreferenceClickListener {
             startActivity(ImportExportActivity.newIntent(requireContext()))
             true
+        }
+
+        // Font scale (0.5x..5.0x, step 0.1x) stored in app_settings as x10 int.
+        val fontPref = findPreference<SeekBarPreference>(SettingsRepository.KEY_FONT_SCALE_X10)
+        fun updateFontSummary(x10: Int) {
+            val s = (x10.coerceIn(5, 50) / 10f)
+            fontPref?.summary = String.format("%.1fx", s)
+        }
+        if (fontPref != null) {
+            // Load initial value from DB.
+            CoroutineScope(Dispatchers.Main).launch {
+                val x10 = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    app.settingsRepository.getFontScaleX10Blocking()
+                }
+                fontPref.value = x10
+                updateFontSummary(x10)
+            }
+            fontPref.setOnPreferenceChangeListener { _, newValue ->
+                val x10 = (newValue as? Int) ?: 10
+                updateFontSummary(x10)
+                // Persist first, then recreate so new configuration is picked up.
+                CoroutineScope(Dispatchers.Main).launch {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        app.settingsRepository.setFontScaleX10Blocking(x10)
+                    }
+                    // Apply immediately in this Settings screen; other screens will recreate onResume.
+                    activity?.recreate()
+                }
+                true
+            }
         }
 
         // Streaming output settings

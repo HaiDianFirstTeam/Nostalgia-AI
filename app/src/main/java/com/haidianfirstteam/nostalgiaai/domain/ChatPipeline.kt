@@ -12,6 +12,7 @@ import com.haidianfirstteam.nostalgiaai.net.TavilyClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
+import android.util.Log
 
 /**
  * 负责把：历史消息 + 联网搜索 + 附件（多模态/解析文本） -> OpenAI 兼容请求
@@ -21,6 +22,14 @@ class ChatPipeline(
     private val context: Context,
     private val db: AppDatabase
 ) {
+
+    private companion object {
+        // Web search context is included in prompt. Keep it small for low-memory devices.
+        private const val WEB_CONTEXT_MAX_CHARS = 8_000
+        private const val WEB_RESULT_TITLE_MAX_CHARS = 160
+        private const val WEB_RESULT_URL_MAX_CHARS = 400
+        private const val WEB_RESULT_CONTENT_MAX_CHARS = 600
+    }
 
     data class Output(
         val text: String,
@@ -171,8 +180,8 @@ class ChatPipeline(
                     return@withContext Result.failure(IllegalStateException("targetType not set"))
                 }
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
@@ -239,7 +248,9 @@ class ChatPipeline(
                         "你必须基于下面的联网搜索结果来回答。如果搜索结果里没有相关信息，请明确说明无法从搜索结果中得到答案，不要编造。"
                     )
                 )
-                messages.add(OpenAiMessage("system", "联网搜索结果：\n${webContext}"))
+                // Avoid duplicating large strings via interpolation.
+                messages.add(OpenAiMessage("system", "联网搜索结果："))
+                messages.add(OpenAiMessage("system", webContext))
             }
             val currentUserId = history.lastOrNull { it.role == "user" }?.id
             history.forEach { msg ->
@@ -414,7 +425,8 @@ class ChatPipeline(
                         "你必须基于下面的联网搜索结果来回答。如果搜索结果里没有相关信息，请明确说明无法从搜索结果中得到答案，不要编造。"
                     )
                 )
-                messages.add(OpenAiMessage("system", "联网搜索结果：\n${webContext}"))
+                messages.add(OpenAiMessage("system", "联网搜索结果："))
+                messages.add(OpenAiMessage("system", webContext))
             }
 
             // Build conversation messages.
@@ -527,19 +539,56 @@ class ChatPipeline(
             val resp = client.search(query, maxResults)
             if (resp.error != null) return null
 
-            val links = resp.results.mapNotNull { r ->
-                val url = (r.url ?: "").trim()
-                if (url.isBlank()) return@mapNotNull null
-                val title = (r.title ?: url).trim()
-                WebLink(title = title, url = url)
+            val links = ArrayList<WebLink>(resp.results.size)
+            val sb = StringBuilder()
+
+            fun takeSafe(s: String?, max: Int): String {
+                val t = (s ?: "").trim()
+                if (t.length <= max) return t
+                return t.substring(0, max) + "…"
             }
 
-            val ctx = resp.results.joinToString("\n") { r ->
-                "- ${r.title ?: ""} ${r.url ?: ""}\n  ${r.content ?: ""}".trim()
+            for (r in resp.results) {
+                val url = takeSafe(r.url, WEB_RESULT_URL_MAX_CHARS)
+                if (url.isBlank()) continue
+                val title = takeSafe(r.title ?: url, WEB_RESULT_TITLE_MAX_CHARS)
+                links.add(WebLink(title = title.ifBlank { url }, url = url))
+
+                if (sb.length < WEB_CONTEXT_MAX_CHARS) {
+                    val content = takeSafe(r.content, WEB_RESULT_CONTENT_MAX_CHARS)
+                    val block = buildString {
+                        append("- ")
+                        append(title)
+                        append(" ")
+                        append(url)
+                        if (content.isNotBlank()) {
+                            append("\n  ")
+                            append(content)
+                        }
+                    }
+                    if (sb.isNotEmpty()) sb.append("\n")
+                    if (sb.length + block.length > WEB_CONTEXT_MAX_CHARS) {
+                        val remain = (WEB_CONTEXT_MAX_CHARS - sb.length).coerceAtLeast(0)
+                        sb.append(block.take(remain))
+                        sb.append("\n…(已截断)")
+                    } else {
+                        sb.append(block)
+                    }
+                }
+
+                if (sb.length >= WEB_CONTEXT_MAX_CHARS) {
+                    // Still collect links, but stop growing context.
+                    continue
+                }
             }
 
-            WebFetch(context = ctx, links = links)
-        } catch (e: Exception) {
+            WebFetch(context = sb.toString(), links = links)
+        } catch (t: Throwable) {
+            try {
+                Log.w("NostalgiaAI", "fetchWeb failed (enabled) maxResults=$maxResults", t)
+            } catch (_: Throwable) {
+                // ignore
+            }
             null
         }
     }
