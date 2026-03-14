@@ -27,10 +27,8 @@
 				android:layout_height="wrap_content"
 				android:orientation="horizontal"
 				android:baselineAligned="false"
-				android:baselineAligned="false"
 				android:paddingStart="4dp"
-				android:paddingEnd="4dp"
-				android:baselineAligned="false" />
+				android:paddingEnd="4dp" />
 		</HorizontalScrollView>
 
 		<androidx.appcompat.widget.AppCompatImageButton
