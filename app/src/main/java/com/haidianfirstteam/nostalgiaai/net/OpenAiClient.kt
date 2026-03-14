@@ -22,7 +22,9 @@ class OpenAiClient(
 
     @Throws(IOException::class)
     fun chatCompletions(req: OpenAiChatRequest): OpenAiChatResponse {
-        val url = normalizeBaseUrl(baseUrl) + "/v1/chat/completions"
+        // IMPORTANT: Do NOT auto-append "/v1". Users may provide baseUrl with or without it.
+        // We only append the endpoint path.
+        val url = normalizeBaseUrl(baseUrl) + "/chat/completions"
         val json = gson.toJson(req)
         val body = RequestBody.create(MediaType.parse("application/json"), json)
         val request = Request.Builder()

@@ -1,8 +1,6 @@
 package com.haidianfirstteam.nostalgiaai.util
 
-import android.app.Activity
 import android.app.Application
-import android.os.Bundle
 
 /**
  * Minimal crash-guard to reduce hard crashes in legacy devices.
@@ -11,9 +9,23 @@ import android.os.Bundle
 object CrashGuard {
 
     fun install(app: Application) {
+        // Enable vector resource compatibility on pre-Lollipop.
+        // Some OEM/legacy devices are flaky if not explicitly enabled.
+        try {
+            androidx.appcompat.app.AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
+        } catch (_: Throwable) {
+            // ignore
+        }
+
         // Global uncaught exception handler
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try {
+                // Best-effort: print to logcat so legacy-device crashes are diagnosable.
+                android.util.Log.e("NostalgiaAI", "Uncaught exception on thread=${t.name}", e)
+            } catch (_: Throwable) {
+                // ignore logging errors
+            }
             try {
                 // Best-effort: keep default behavior
                 previous?.uncaughtException(t, e)

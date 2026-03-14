@@ -37,43 +37,21 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Spinner
-                android:id="@+id/spModelGroup"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnTarget"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:text="@string/empty_no_target" />
 
-            <LinearLayout
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnWebSearch"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:orientation="vertical">
-
-                <Switch
-                    android:id="@+id/switchWebSearch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/label_web" />
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical"
-                        android:text="@string/label_count" />
-
-                    <EditText
-                        android:id="@+id/etWebCount"
-                        android:layout_width="48dp"
-                        android:layout_height="wrap_content"
-                        android:inputType="number"
-                        android:text="5" />
-                </LinearLayout>
-            </LinearLayout>
+                android:text="@string/label_web" />
         </LinearLayout>
 
         <LinearLayout
@@ -117,21 +95,23 @@
             android:layout_marginTop="6dp"
             android:orientation="horizontal">
 
-            <ImageButton
+            <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/btnUpload"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:contentDescription="@string/action_upload"
-                android:src="@drawable/ic_upload_24"
-                android:background="@android:color/transparent" />
+                android:background="@android:color/transparent"
+                app:srcCompat="@drawable/ic_upload_24"
+                app:tint="?attr/colorControlNormal" />
 
-            <ImageButton
+            <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/btnCamera"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:contentDescription="@string/action_camera"
-                android:src="@drawable/ic_camera_24"
                 android:background="@android:color/transparent"
+                app:srcCompat="@drawable/ic_camera_24"
+                app:tint="?attr/colorControlNormal"
                 android:visibility="gone" />
 
             <EditText
@@ -143,14 +123,15 @@
                 android:hint="@string/hint_input"
                 android:maxLines="4" />
 
-            <ImageButton
+            <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/btnSend"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginStart="6dp"
                 android:contentDescription="@string/action_send"
-                android:src="@drawable/ic_send_24"
-                android:background="@android:color/transparent" />
+                android:background="@android:color/transparent"
+                app:srcCompat="@drawable/ic_send_24"
+                app:tint="?attr/colorControlNormal" />
 
         </LinearLayout>
 

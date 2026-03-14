@@ -1,6 +1,5 @@
 package com.haidianfirstteam.nostalgiaai.ui.chat
 
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -17,12 +16,12 @@ import com.haidianfirstteam.nostalgiaai.databinding.FragmentChatBinding
 import com.haidianfirstteam.nostalgiaai.ui.drawer.DrawerViewModel
 import com.haidianfirstteam.nostalgiaai.util.FileUtil
 import com.haidianfirstteam.nostalgiaai.domain.AttachmentProcessor
-import android.widget.ArrayAdapter
 import androidx.core.content.FileProvider
 import java.io.File
 import com.haidianfirstteam.nostalgiaai.util.ToastUtil
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.appcompat.widget.SwitchCompat
 
 class ChatFragment : Fragment() {
 
@@ -43,6 +42,9 @@ class ChatFragment : Fragment() {
     private var pendingTakePhotoAfterPermission: Boolean = false
 
     private val attachments = ArrayList<FileUtil.PickedFile>()
+
+    private var webSearchEnabled: Boolean = false
+    private var webSearchCount: Int = 5
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -82,8 +84,8 @@ class ChatFragment : Fragment() {
                 return@setOnClickListener
             }
             val sel = settingsVm.selected.value
-            val webEnabled = binding.switchWebSearch.isChecked
-            val webCount = (binding.etWebCount.text?.toString() ?: "5").toIntOrNull() ?: 5
+            val webEnabled = webSearchEnabled
+            val webCount = webSearchCount
             val pickedAttachments = ArrayList(attachments)
             attachments.clear()
             renderAttachmentSummary()
@@ -112,25 +114,22 @@ class ChatFragment : Fragment() {
 
         // Targets spinner (groups + direct models)
         settingsVm.targets.observe(viewLifecycleOwner) { list ->
-            val titles = list.map { it.title }
-            val spAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, titles)
-            spAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            binding.spModelGroup.adapter = spAdapter
-            // Keep current selection when possible
-            if (titles.isEmpty()) {
+            // Update button label
+            val sel = settingsVm.selected.value
+            binding.btnTarget.text = sel?.title ?: getString(com.haidianfirstteam.nostalgiaai.R.string.empty_no_target)
+            if (list.isEmpty()) {
                 ToastUtil.show(requireContext(), getString(com.haidianfirstteam.nostalgiaai.R.string.empty_no_target))
             }
         }
-        binding.spModelGroup.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {
-                settingsVm.selectByIndex(position)
-            }
+        binding.btnTarget.setOnClickListener { showTargetPickerDialog() }
 
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
+        binding.btnWebSearch.setOnClickListener { showWebSearchDialog() }
+        renderWebSearchButton()
+
         settingsVm.selected.observe(viewLifecycleOwner) { sel ->
             // Camera button only for multimodal target
             binding.btnCamera.visibility = if (sel?.multimodalPossible == true) View.VISIBLE else View.GONE
+            binding.btnTarget.text = sel?.title ?: getString(com.haidianfirstteam.nostalgiaai.R.string.empty_no_target)
         }
         settingsVm.refresh()
 
@@ -306,6 +305,72 @@ class ChatFragment : Fragment() {
         }
         if (attachments.size > 3) sb.append("\n...")
         binding.tvAttachments.text = sb.toString()
+    }
+
+    private fun renderWebSearchButton() {
+        val text = if (webSearchEnabled) {
+            "联网(${webSearchCount})"
+        } else {
+            "联网(关)"
+        }
+        binding.btnWebSearch.text = text
+    }
+
+    private fun showWebSearchDialog() {
+        val ctx = requireContext()
+        val container = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+        }
+
+        val switch = SwitchCompat(ctx).apply {
+            text = "开启联网搜索"
+            isChecked = webSearchEnabled
+        }
+        container.addView(switch)
+
+        val countEt = android.widget.EditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(webSearchCount.toString())
+            hint = "条数（1-10）"
+        }
+        container.addView(countEt)
+
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("联网搜索")
+            .setView(container)
+            .setPositiveButton("确定") { _, _ ->
+                webSearchEnabled = switch.isChecked
+                val c = countEt.text?.toString()?.toIntOrNull() ?: webSearchCount
+                webSearchCount = c.coerceIn(1, 10)
+                renderWebSearchButton()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showTargetPickerDialog() {
+        val list = settingsVm.targets.value ?: emptyList()
+        if (list.isEmpty()) {
+            ToastUtil.show(requireContext(), getString(com.haidianfirstteam.nostalgiaai.R.string.empty_no_target))
+            return
+        }
+        val titles = list.map { it.title }.toTypedArray()
+        val current = settingsVm.selected.value
+        val checked = if (current == null) {
+            0
+        } else {
+            list.indexOfFirst { it.target == current.target }.takeIf { it >= 0 } ?: 0
+        }
+        var selected = checked
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("选择模型/组")
+            .setSingleChoiceItems(titles, checked) { _, which -> selected = which }
+            .setPositiveButton("确定") { _, _ ->
+                settingsVm.selectByIndex(selected)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     override fun onDestroyView() {
