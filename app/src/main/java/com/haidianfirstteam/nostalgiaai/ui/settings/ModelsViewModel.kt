@@ -181,7 +181,9 @@ class ModelsViewModel(app: Application) : AndroidViewModel(app) {
      * - If moved into the section under a group header, attach to that group with next orderIndex.
      * - If moved below all groups, detach (become ungrouped).
      */
-    fun commitDrop(providerId: Long, toPos: Int, snapshot: List<ModelRow>) {
+    fun commitDrop(providerId: Long, drop: DropInfo) {
+        val snapshot = drop.snapshot
+        val toPos = drop.hoverPos
         // Compute effective group assignment from the tree snapshot.
         // (Don't trust ProviderRow.groupId during drag; it may be stale.)
         val effectiveGroupByProvider = HashMap<Long, Long?>()
@@ -239,9 +241,24 @@ class ModelsViewModel(app: Application) : AndroidViewModel(app) {
                     existing.id
                 }
 
-                // Reorder within target group according to snapshot order
+                // Reorder within target group according to snapshot order, honoring insertBefore/After.
                 val desired = orderByGroup[targetGroupId] ?: ArrayList()
-                if (!desired.contains(providerId)) desired.add(providerId)
+
+                // If provider isn't present in desired list yet (e.g. dropped on header), insert near anchor.
+                if (!desired.contains(providerId)) {
+                    // Find an anchor provider near hover position.
+                    val anchorProviderId = (snapshot.getOrNull(toPos) as? ModelRow.ProviderRow)
+                        ?.providerId
+                        ?.takeIf { effectiveGroupByProvider[it] == targetGroupId }
+
+                    if (anchorProviderId == null || !desired.contains(anchorProviderId)) {
+                        desired.add(providerId)
+                    } else {
+                        val idx = desired.indexOf(anchorProviderId)
+                        val insertIdx = if (drop.insertAfter) idx + 1 else idx
+                        desired.add(insertIdx.coerceIn(0, desired.size), providerId)
+                    }
+                }
 
                 val groupEntries = db.groupProviders().listByGroup(targetGroupId)
                 val byProvider = groupEntries.associateBy { it.providerId }

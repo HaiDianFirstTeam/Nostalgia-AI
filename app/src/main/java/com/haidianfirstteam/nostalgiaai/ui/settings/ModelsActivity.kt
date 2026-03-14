@@ -54,8 +54,8 @@ class ModelsActivity : AppCompatActivity() {
         binding.recycler.adapter = adapter
 
         val touchHelper = ItemTouchHelper(
-            DragCallback(adapter) { providerId, toPos, snapshot ->
-                vm.commitDrop(providerId, toPos, snapshot)
+            DragCallback(adapter) { providerId, drop ->
+                vm.commitDrop(providerId, drop)
             }
         )
         touchHelper.attachToRecyclerView(binding.recycler)
@@ -180,6 +180,9 @@ class ModelsActivity : AppCompatActivity() {
                     }
                     .show()
             }
+            is ModelRow.UngroupedHeader -> {
+                // no menu
+            }
         }
     }
 
@@ -224,7 +227,7 @@ class ModelsActivity : AppCompatActivity() {
             notifyDataSetChanged()
         }
 
-        fun snapshot(): List<ModelRow> = rows.toList()
+        override fun snapshot(): List<ModelRow> = rows.toList()
 
         override fun setDropHighlight(targetGroupId: Long?) {
             val prevGroup = highlightedGroupId
@@ -468,7 +471,7 @@ class ModelsActivity : AppCompatActivity() {
 
     private class DragCallback(
         private val adapter: DragAdapter,
-        private val onDropCommit: (Long, Int, List<ModelRow>) -> Unit
+        private val onDropCommit: (Long, DropInfo) -> Unit
     ) : ItemTouchHelper.Callback() {
 
         private val indicatorPaint: Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -485,7 +488,11 @@ class ModelsActivity : AppCompatActivity() {
         }
 
         private var draggingProviderId: Long? = null
-        private var lastToPos: Int = -1
+        private var lastHoverPos: Int = -1
+
+        // Insertion indicator-derived drop info (source of truth)
+        private var indicatorHoverPos: Int = -1
+        private var indicatorInsertAfter: Boolean = false
 
         override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
             val pos = viewHolder.bindingAdapterPosition
@@ -501,12 +508,7 @@ class ModelsActivity : AppCompatActivity() {
             if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
             if (!adapter.isDraggable(from)) return false
             adapter.onItemMove(from, to)
-            lastToPos = to
-
-            // Highlight drop target header based on current snapshot
-            val snap = adapter.snapshot()
-            val groupId = findEffectiveGroupIdAt(snap, to)
-            adapter.setDropHighlight(groupId)
+            lastHoverPos = to
             return true
         }
 
@@ -548,7 +550,26 @@ class ModelsActivity : AppCompatActivity() {
             val targetPos = if (targetView != null) recyclerView.getChildAdapterPosition(targetView) else RecyclerView.NO_POSITION
             if (targetPos == RecyclerView.NO_POSITION) return
 
+            val snap = adapter.snapshot()
             val targetRow = adapter.getRow(targetPos)
+
+            // Compute insert position based on indicator target.
+            var hoverPos = targetPos
+            var insertAfter = false
+            if (targetView != null) {
+                val mid = targetView.top + targetView.height / 2f
+                insertAfter = centerY >= mid
+            }
+            if (targetRow is ModelRow.GroupHeader || targetRow is ModelRow.UngroupedHeader) {
+                hoverPos = (targetPos + 1).coerceAtMost((snap.size - 1).coerceAtLeast(0))
+                insertAfter = false
+            }
+            indicatorHoverPos = hoverPos
+            indicatorInsertAfter = insertAfter
+
+            // Update header highlight to match indicator drop section.
+            val groupId = findEffectiveGroupIdAt(snap, hoverPos)
+            adapter.setDropHighlight(groupId)
             val y = when (targetRow) {
                 is ModelRow.GroupHeader, is ModelRow.UngroupedHeader -> {
                     // Insert below header
@@ -582,7 +603,7 @@ class ModelsActivity : AppCompatActivity() {
                 val pos = viewHolder.bindingAdapterPosition
                 val row = adapter.getRow(pos)
                 draggingProviderId = (row as? ModelRow.ProviderRow)?.providerId
-                lastToPos = pos
+                lastHoverPos = pos
 
                 // Drag visual feedback
                 viewHolder.itemView.alpha = 0.88f
@@ -600,11 +621,27 @@ class ModelsActivity : AppCompatActivity() {
             val pid = draggingProviderId
             val finalPos = viewHolder.bindingAdapterPosition
             if (pid != null && finalPos != RecyclerView.NO_POSITION) {
-                onDropCommit(pid, finalPos, adapter.snapshot())
+                val snap = adapter.snapshot()
+                // Prefer insertion-indicator drop info if available
+                val hover = when {
+                    indicatorHoverPos >= 0 -> indicatorHoverPos
+                    lastHoverPos >= 0 -> lastHoverPos
+                    else -> finalPos
+                }
+                val insertAfter = indicatorInsertAfter
+                val drop = DropInfo(
+                    hoverPos = hover.coerceIn(0, (snap.size - 1).coerceAtLeast(0)),
+                    insertAfter = insertAfter,
+                    snapshot = snap
+                )
+                onDropCommit(pid, drop)
             }
             adapter.setDropHighlight(null)
             draggingProviderId = null
-            lastToPos = -1
+            lastHoverPos = -1
+
+            indicatorHoverPos = -1
+            indicatorInsertAfter = false
         }
     }
 
@@ -623,3 +660,9 @@ sealed class ModelRow {
         val groupId: Long? = null
     ) : ModelRow()
 }
+
+data class DropInfo(
+    val hoverPos: Int,
+    val insertAfter: Boolean,
+    val snapshot: List<ModelRow>
+)

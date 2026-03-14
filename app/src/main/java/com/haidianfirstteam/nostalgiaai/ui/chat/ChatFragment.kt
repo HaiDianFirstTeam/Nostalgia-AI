@@ -174,9 +174,9 @@ class ChatFragment : Fragment() {
         binding.rvMessages.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
                 val lm = recyclerView.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager ?: return
-                val last = lm.findLastCompletelyVisibleItemPosition()
+                val last = lm.findLastVisibleItemPosition()
                 val total = lm.itemCount
-                stickToBottom = total <= 0 || last >= total - 1
+                stickToBottom = total <= 0 || last >= total - 2
             }
         })
 

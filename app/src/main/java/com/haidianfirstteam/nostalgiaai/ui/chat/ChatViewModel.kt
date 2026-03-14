@@ -45,6 +45,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var runningCall: Call? = null
     private var runningAssistantMessageId: Long? = null
 
+    // Throttle UI/DB updates during streaming to reduce jitter.
+    private var lastStreamUpdateAt: Long = 0L
+    private val streamUpdateMinIntervalMs: Long = 80L
+
     fun loadConversation(conversationId: Long) {
         _conversationId.value = conversationId
         // Observe via Room LiveData would be better; keep simple for now.
@@ -204,13 +208,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                         routedModelId = out0.routedModelId
                                         webLinks = out0.webLinks
                                     },
-                                    onDeltaText = { delta ->
+                                onDeltaText = { delta ->
                                     sb.append(delta)
                                     val textNow = sb.toString()
                                     val encodedNow = if (webLinks.isNotEmpty()) {
                                         WebLinksCodec.encode(webLinks.map { WebLinkUi(it.title, it.url) }, textNow)
                                     } else textNow
                                     // Update DB on IO; refresh UI on main
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastStreamUpdateAt < streamUpdateMinIntervalMs) return@onDeltaText
+                                    lastStreamUpdateAt = now
+
                                     viewModelScope.launch(Dispatchers.IO) {
                                         val msg = db.messages().getById(assistantId) ?: return@launch
                                         db.messages().update(msg.copy(content = encodedNow))

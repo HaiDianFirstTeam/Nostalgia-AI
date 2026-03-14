@@ -1,70 +1,8 @@
-Run chmod +x ./gradlew
-Downloading https://downloads.gradle.org/distributions/gradle-7.5-bin.zip
-...........10%............20%...........30%............40%...........50%............60%...........70%............80%...........90%............100%
-Welcome to Gradle 7.5!
-Here are the highlights of this release:
- - Support for Java 18
- - Support for building with Groovy 4
- - Much more responsive continuous builds
- - Improved diagnostics for dependency resolution
-For more details see https://docs.gradle.org/7.5/release-notes.html
-Starting a Gradle Daemon (subsequent builds will be faster)
-Configuration on demand is an incubating feature.
-Checking the license for package Android SDK Build-Tools 30.0.3 in /usr/local/lib/android/sdk/licenses
-License for package Android SDK Build-Tools 30.0.3 accepted.
-Preparing "Install Android SDK Build-Tools 30.0.3 (revision: 30.0.3)".
-"Install Android SDK Build-Tools 30.0.3 (revision: 30.0.3)" ready.
-Installing Android SDK Build-Tools 30.0.3 in /usr/local/lib/android/sdk/build-tools/30.0.3
-"Install Android SDK Build-Tools 30.0.3 (revision: 30.0.3)" complete.
-"Install Android SDK Build-Tools 30.0.3 (revision: 30.0.3)" finished.
-> Task :app:buildKotlinToolingMetadata
-> Task :app:preBuild UP-TO-DATE
-> Task :app:preReleaseBuild UP-TO-DATE
-> Task :app:compileReleaseAidl NO-SOURCE
-> Task :app:compileReleaseRenderscript NO-SOURCE
-> Task :app:dataBindingMergeDependencyArtifactsRelease
-> Task :app:generateReleaseResValues
-> Task :app:generateReleaseResources
-> Task :app:generateReleaseBuildConfig
-> Task :app:mapReleaseSourceSetPaths
-> Task :app:createReleaseCompatibleScreenManifests
-> Task :app:extractDeepLinksRelease
-> Task :app:checkReleaseAarMetadata
-> Task :app:processReleaseMainManifest
-> Task :app:processReleaseManifest
-> Task :app:mergeReleaseResources
-> Task :app:javaPreCompileRelease
-> Task :app:dataBindingGenBaseClassesRelease
-> Task :app:extractProguardFiles
-> Task :app:mergeReleaseJniLibFolders
-> Task :app:mergeReleaseNativeLibs NO-SOURCE
-> Task :app:stripReleaseDebugSymbols NO-SOURCE
-> Task :app:extractReleaseNativeSymbolTables NO-SOURCE
-> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
-> Task :app:processReleaseJavaRes NO-SOURCE
-> Task :app:checkReleaseDuplicateClasses
-> Task :app:mergeReleaseShaders
-> Task :app:compileReleaseShaders NO-SOURCE
-> Task :app:generateReleaseAssets UP-TO-DATE
-> Task :app:mergeReleaseAssets
-> Task :app:mergeReleaseArtProfile
-> Task :app:processApplicationManifestReleaseForBundle
-> Task :app:compressReleaseAssets
-> Task :app:collectReleaseDependencies
-> Task :app:sdkReleaseDependencyData
-> Task :app:validateSigningRelease
-> Task :app:writeReleaseAppMetadata
-> Task :app:writeReleaseSigningConfigVersions
-> Task :app:processReleaseManifestForPackage
-> Task :app:bundleReleaseResources
-> Task :app:processReleaseResources
-> Task :app:kaptGenerateStubsReleaseKotlin
 > Task :app:kaptReleaseKotlin
-e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/chat/MessageAdapter.kt:102:54 Unresolved reference: makeChip
-e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/chat/MessageAdapter.kt:121:42 Unresolved reference: makeChip
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/settings/ModelsActivity.kt:127:9 'when' expression must be exhaustive, add necessary 'is UngroupedHeader' branch or 'else' branch instead
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/settings/ModelsActivity.kt:227:13 'snapshot' hides member of supertype 'DragAdapter' and needs 'override' modifier
 > Task :app:compileReleaseKotlin FAILED
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1773480831915.json
-32 actionable tasks: 32 executed
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1773490758685.json
 FAILURE: Build failed with an exception.
 * What went wrong:
 Execution failed for task ':app:compileReleaseKotlin'.
@@ -73,7 +11,8 @@ Execution failed for task ':app:compileReleaseKotlin'.
 * Try:
 > Run with --stacktrace option to get the stack trace.
 > Run with --info or --debug option to get more log output.
+32 actionable tasks: 32 executed
 > Run with --scan to get full insights.
 * Get more help at https://help.gradle.org
-BUILD FAILED in 1m 36s
+BUILD FAILED in 1m 40s
 Error: Process completed with exit code 1.
