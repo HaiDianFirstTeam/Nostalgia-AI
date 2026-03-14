@@ -1,6 +1,9 @@
 package com.haidianfirstteam.nostalgiaai.net
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import okhttp3.MediaType
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -60,17 +63,8 @@ class OpenAiClient(
         val error: String? = null
     )
 
-    /**
-     * OpenAI-compatible streaming chat completions (SSE).
-     * - Reads lines starting with "data:"
-     * - Stops on "[DONE]"
-     * - For each JSON payload, extracts choices[].delta.content (best-effort)
-     */
-    @Throws(IOException::class)
-    fun chatCompletionsStream(
-        req: OpenAiChatRequest,
-        onChunk: (StreamChunk) -> Unit
-    ): Call {
+    /** Create an SSE streaming Call (not executed). */
+    fun createChatCompletionsStreamCall(req: OpenAiChatRequest): Call {
         val url = normalizeBaseUrl(baseUrl) + "/chat/completions"
         val json = gson.toJson(req.copy(stream = true))
         val body = RequestBody.create(MediaType.parse("application/json"), json)
@@ -80,18 +74,24 @@ class OpenAiClient(
             .addHeader("Content-Type", "application/json")
             .post(body)
             .build()
+        return client.newCall(request)
+    }
 
-        val call = client.newCall(request)
+    /**
+     * Execute an SSE Call and emit chunks.
+     * IMPORTANT: the caller may cancel() this Call.
+     */
+    fun executeChatCompletionsStream(call: Call, onChunk: (StreamChunk) -> Unit) {
         try {
             call.execute().use { resp ->
                 if (!resp.isSuccessful) {
                     val text = resp.body()?.string() ?: ""
                     onChunk(StreamChunk(error = "HTTP ${resp.code()} ${resp.message()}\n$text"))
-                    return call
+                    return
                 }
                 val stream = resp.body()?.byteStream() ?: run {
                     onChunk(StreamChunk(error = "empty response body"))
-                    return call
+                    return
                 }
                 val reader = BufferedReader(InputStreamReader(stream, Charsets.UTF_8))
                 while (true) {
@@ -104,19 +104,7 @@ class OpenAiClient(
                         onChunk(StreamChunk(done = true))
                         break
                     }
-                    // Try parse chunk JSON
-                    try {
-                        val obj = gson.fromJson(payload, java.util.Map::class.java)
-                        val choices = obj["choices"] as? java.util.List<*>
-                        val first = choices?.firstOrNull() as? java.util.Map<*, *>
-                        val delta = first?.get("delta") as? java.util.Map<*, *>
-                        val content = delta?.get("content") as? String
-                        if (!content.isNullOrEmpty()) {
-                            onChunk(StreamChunk(deltaText = content))
-                        }
-                    } catch (_: Exception) {
-                        // ignore malformed chunks
-                    }
+                    parseAndEmitDelta(payload, onChunk)
                 }
             }
         } catch (e: IOException) {
@@ -126,7 +114,83 @@ class OpenAiClient(
                 onChunk(StreamChunk(error = e.message))
             }
         }
-        return call
+    }
+
+    private fun parseAndEmitDelta(payload: String, onChunk: (StreamChunk) -> Unit) {
+        try {
+            val rootEl = JsonParser.parseString(payload)
+            if (!rootEl.isJsonObject) return
+            val root = rootEl.asJsonObject
+
+            // Error payload
+            root.getAsJsonObject("error")?.get("message")?.let { msgEl ->
+                val msg = msgEl.asStringOrNull()
+                if (!msg.isNullOrBlank()) {
+                    onChunk(StreamChunk(error = msg))
+                    return
+                }
+            }
+
+            val choices = root.getAsJsonArray("choices") ?: return
+            if (choices.size() == 0) return
+            val first = choices[0]
+            if (!first.isJsonObject) return
+            val choice = first.asJsonObject
+
+            // chat.completions streaming: choices[0].delta.content
+            val delta = choice.getAsJsonObject("delta")
+            val deltaContent = delta?.get("content")
+            val text = extractText(deltaContent)
+                ?: choice.get("text").asStringOrNull() // legacy completions
+                ?: choice.getAsJsonObject("message")?.get("content")?.let { extractText(it) }
+
+            if (!text.isNullOrEmpty()) {
+                onChunk(StreamChunk(deltaText = text))
+            }
+        } catch (_: Exception) {
+            // ignore malformed chunks
+        }
+    }
+
+    private fun extractText(el: JsonElement?): String? {
+        if (el == null || el.isJsonNull) return null
+        if (el.isJsonPrimitive) {
+            val p = el.asJsonPrimitive
+            if (p.isString) return p.asString
+            return null
+        }
+        if (el.isJsonObject) {
+            val obj = el.asJsonObject
+            // Some compat providers may wrap text in {"text":"..."}
+            obj.get("text")?.asStringOrNull()?.let { return it }
+            return null
+        }
+        if (el.isJsonArray) {
+            val arr = el.asJsonArray
+            val sb = StringBuilder()
+            for (i in 0 until arr.size()) {
+                val item = arr[i]
+                when {
+                    item.isJsonPrimitive -> item.asStringOrNull()?.let { sb.append(it) }
+                    item.isJsonObject -> {
+                        val obj = item.asJsonObject
+                        obj.get("text")?.asStringOrNull()?.let { sb.append(it) }
+                        // also support {"type":"text","text":"..."}
+                    }
+                }
+            }
+            return if (sb.isNotEmpty()) sb.toString() else null
+        }
+        return null
+    }
+
+    private fun JsonElement?.asStringOrNull(): String? {
+        if (this == null || this.isJsonNull) return null
+        return try {
+            if (this.isJsonPrimitive && this.asJsonPrimitive.isString) this.asString else null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun normalizeBaseUrl(raw: String): String {

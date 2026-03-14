@@ -8,17 +8,10 @@
     android:paddingTop="6dp"
     android:paddingBottom="6dp">
 
-	<TextView
-		android:id="@+id/tvContent"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:background="@drawable/bg_bubble_ai"
-		android:textColor="?android:attr/textColorPrimary" />
-
 	<LinearLayout
 		android:layout_width="match_parent"
 		android:layout_height="wrap_content"
-		android:layout_marginTop="6dp"
+		android:layout_marginTop="2dp"
 		android:orientation="vertical">
 
 		<HorizontalScrollView
@@ -49,6 +42,14 @@
 			app:srcCompat="@android:drawable/arrow_down_float"
 			app:tint="?attr/colorControlNormal" />
 	</LinearLayout>
+
+	<TextView
+		android:id="@+id/tvContent"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:layout_marginTop="2dp"
+		android:background="@drawable/bg_bubble_ai"
+		android:textColor="?android:attr/textColorPrimary" />
 
     <LinearLayout
         android:layout_width="wrap_content"

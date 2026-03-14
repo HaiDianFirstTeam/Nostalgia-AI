@@ -172,7 +172,8 @@ class ChatFragment : Fragment() {
         chatVm.requestState.observe(viewLifecycleOwner) { st ->
             binding.requestStatus.visibility = if (st.inFlight) View.VISIBLE else View.GONE
             binding.tvStatus.text = st.statusText
-            binding.btnSend.isEnabled = !st.inFlight
+            // While in-flight, btnSend acts as STOP, so it must remain clickable.
+            binding.btnSend.isEnabled = true
             binding.btnUpload.isEnabled = !st.inFlight
             binding.btnCamera.isEnabled = !st.inFlight
 
@@ -396,7 +397,7 @@ class ChatFragment : Fragment() {
         val countEt = android.widget.EditText(ctx).apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             setText(webSearchCount.toString())
-            hint = "条数（1-10）"
+            hint = "条数（>=1）"
         }
         container.addView(countEt)
 

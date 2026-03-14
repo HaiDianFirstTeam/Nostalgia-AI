@@ -202,47 +202,48 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                         webLinks = out0.webLinks
                                     },
                                     onDeltaText = { delta ->
-                                        sb.append(delta)
-                                        val textNow = sb.toString()
-                                        val encodedNow = if (webLinks.isNotEmpty()) {
-                                            WebLinksCodec.encode(webLinks.map { WebLinkUi(it.title, it.url) }, textNow)
-                                        } else textNow
-                                        viewModelScope.launch {
-                                            withContext(Dispatchers.IO) {
-                                                val msg = db.messages().getById(assistantId) ?: return@withContext
-                                                db.messages().update(msg.copy(content = encodedNow))
-                                            }
-                                            refreshMessages(convId)
-                                        }
-                                    },
-                                    onDone = { _ ->
-                                        viewModelScope.launch {
-                                            withContext(Dispatchers.IO) {
-                                                val msg = db.messages().getById(assistantId) ?: return@withContext
-                                                db.messages().update(
-                                                    msg.copy(
-                                                        routedProviderId = routedProviderId,
-                                                        routedApiKeyId = routedApiKeyId,
-                                                        routedModelId = routedModelId
-                                                    )
-                                                )
-                                                db.conversations().touch(convId, System.currentTimeMillis())
-                                            }
-                                            refreshMessages(convId)
-                                        }
-                                    },
-                                    onError = { err ->
-                                        viewModelScope.launch {
-                                            withContext(Dispatchers.IO) {
-                                                val msg = db.messages().getById(assistantId) ?: return@withContext
-                                                if (msg.content.isBlank()) {
-                                                    db.messages().update(msg.copy(content = "请求失败：${err}"))
-                                                }
-                                            }
+                                    sb.append(delta)
+                                    val textNow = sb.toString()
+                                    val encodedNow = if (webLinks.isNotEmpty()) {
+                                        WebLinksCodec.encode(webLinks.map { WebLinkUi(it.title, it.url) }, textNow)
+                                    } else textNow
+                                    // Update DB on IO; refresh UI on main
+                                    viewModelScope.launch(Dispatchers.IO) {
+                                        val msg = db.messages().getById(assistantId) ?: return@launch
+                                        db.messages().update(msg.copy(content = encodedNow))
+                                        withContext(Dispatchers.Main) {
                                             refreshMessages(convId)
                                         }
                                     }
-                                )
+                                },
+                                    onDone = { _ ->
+                                    viewModelScope.launch(Dispatchers.IO) {
+                                        val msg = db.messages().getById(assistantId) ?: return@launch
+                                        db.messages().update(
+                                            msg.copy(
+                                                routedProviderId = routedProviderId,
+                                                routedApiKeyId = routedApiKeyId,
+                                                routedModelId = routedModelId
+                                            )
+                                        )
+                                        db.conversations().touch(convId, System.currentTimeMillis())
+                                        withContext(Dispatchers.Main) {
+                                            refreshMessages(convId)
+                                        }
+                                    }
+                                },
+                                onError = { err ->
+                                    viewModelScope.launch(Dispatchers.IO) {
+                                        val msg = db.messages().getById(assistantId) ?: return@launch
+                                        if (msg.content.isBlank()) {
+                                            db.messages().update(msg.copy(content = "请求失败：${err}"))
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            refreshMessages(convId)
+                                        }
+                                    }
+                                }
+                            )
                                 runningCall = handle.call
                             } catch (e: Exception) {
                                 // Never crash the app on stream setup failure.

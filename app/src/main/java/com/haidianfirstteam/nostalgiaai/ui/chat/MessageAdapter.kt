@@ -132,7 +132,14 @@ class MessageAdapter(
             }
 
             // Markdown render
-            markwon.setMarkdown(b.tvContent, item.content)
+            if (item.content.isBlank()) {
+                // Avoid showing an ever-growing empty bubble during streaming
+                b.tvContent.visibility = View.GONE
+                b.tvContent.text = ""
+            } else {
+                b.tvContent.visibility = View.VISIBLE
+                markwon.setMarkdown(b.tvContent, item.content)
+            }
             b.btnCopy.setOnClickListener { copy(b.root.context, item.content) }
             b.btnRetry.setOnClickListener { onRetry(item) }
             b.btnEdit.setOnClickListener {

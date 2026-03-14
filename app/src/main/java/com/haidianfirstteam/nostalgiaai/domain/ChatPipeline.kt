@@ -279,33 +279,42 @@ class ChatPipeline(
                 onStart(out0)
 
                 val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
-                val call = client.chatCompletionsStream(
-                    OpenAiChatRequest(
-                        model = model.modelName,
-                        messages = buildMessages(model.multimodal),
-                        temperature = 0.7,
-                        stream = true
-                    )
-                ) { chunk ->
-                    when {
-                        chunk.done -> {
-                            emitBuffered(force = true)
-                            onDone(out0)
-                        }
-                        chunk.error != null -> {
-                            emitBuffered(force = true)
-                            onError(chunk.error)
-                        }
-                        chunk.deltaText != null -> {
-                            if (intervalMs > 0) {
-                                buffer.append(chunk.deltaText)
-                                emitBuffered(force = false)
-                            } else {
-                                onDeltaText(chunk.deltaText)
+                // Execute streaming on a background thread and return the Call immediately.
+                // OkHttp Call is created once; we can cancel it from UI.
+                val req0 = OpenAiChatRequest(
+                    model = model.modelName,
+                    messages = buildMessages(model.multimodal),
+                    temperature = 0.7,
+                    stream = true
+                )
+                val call = client.createChatCompletionsStreamCall(req0)
+                Thread {
+                    try {
+                        client.executeChatCompletionsStream(call) { chunk ->
+                            when {
+                                chunk.done -> {
+                                    emitBuffered(force = true)
+                                    onDone(out0)
+                                }
+                                chunk.error != null -> {
+                                    emitBuffered(force = true)
+                                    onError(chunk.error)
+                                }
+                                chunk.deltaText != null -> {
+                                    if (intervalMs > 0) {
+                                        buffer.append(chunk.deltaText)
+                                        emitBuffered(force = false)
+                                    } else {
+                                        onDeltaText(chunk.deltaText)
+                                    }
+                                }
                             }
                         }
+                    } catch (e: Exception) {
+                        emitBuffered(force = true)
+                        onError(e.message ?: "stream error")
                     }
-                }
+                }.start()
                 return@withContext StreamHandle(call, providerId, keys[0].id, modelId)
             }
 
@@ -328,34 +337,41 @@ class ChatPipeline(
 
                     val out0 = Output(text = "", routedProviderId = gp.providerId, routedApiKeyId = keys[0].id, routedModelId = gp.modelId, webLinks = webLinks)
                     onStart(out0)
-                    val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
-                    val call = client.chatCompletionsStream(
-                        OpenAiChatRequest(
-                            model = model.modelName,
-                            messages = buildMessages(model.multimodal),
-                            temperature = 0.7,
-                            stream = true
-                        )
-                    ) { chunk ->
-                        when {
-                            chunk.done -> {
-                                emitBuffered(force = true)
-                                onDone(out0)
-                            }
-                            chunk.error != null -> {
-                                emitBuffered(force = true)
-                                onError(chunk.error)
-                            }
-                            chunk.deltaText != null -> {
-                                if (intervalMs > 0) {
-                                    buffer.append(chunk.deltaText)
-                                    emitBuffered(force = false)
-                                } else {
-                                    onDeltaText(chunk.deltaText)
+                val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
+                    val req0 = OpenAiChatRequest(
+                        model = model.modelName,
+                        messages = buildMessages(model.multimodal),
+                        temperature = 0.7,
+                        stream = true
+                    )
+                    val call = client.createChatCompletionsStreamCall(req0)
+                    Thread {
+                        try {
+                            client.executeChatCompletionsStream(call) { chunk ->
+                                when {
+                                    chunk.done -> {
+                                        emitBuffered(force = true)
+                                        onDone(out0)
+                                    }
+                                    chunk.error != null -> {
+                                        emitBuffered(force = true)
+                                        onError(chunk.error)
+                                    }
+                                    chunk.deltaText != null -> {
+                                        if (intervalMs > 0) {
+                                            buffer.append(chunk.deltaText)
+                                            emitBuffered(force = false)
+                                        } else {
+                                            onDeltaText(chunk.deltaText)
+                                        }
+                                    }
                                 }
                             }
+                        } catch (e: Exception) {
+                            emitBuffered(force = true)
+                            onError(e.message ?: "stream error")
                         }
-                    }
+                    }.start()
                     return@withContext StreamHandle(call, gp.providerId, keys[0].id, gp.modelId)
                 }
 
