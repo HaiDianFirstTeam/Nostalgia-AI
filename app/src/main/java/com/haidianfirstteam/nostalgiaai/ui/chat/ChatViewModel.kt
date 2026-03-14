@@ -216,6 +216,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                         routedModelId = out0.routedModelId
                                         webLinks = out0.webLinks
                                         webLinksUi = out0.webLinks.map { WebLinkUi(it.title, it.url) }
+                                        // Show chips immediately during streaming (do not wait for final encode).
+                                        updateAssistantWebLinksPreview(assistantId, webLinksUi)
                                     },
                                 onDeltaText = onDeltaText@{ delta ->
                                     sb.append(delta)
@@ -313,6 +315,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (idx < 0) return
         val old = current[idx]
         val next = old.copy(content = textNow)
+        val list = current.toMutableList()
+        list[idx] = next
+        _messages.postValue(list)
+    }
+
+    private fun updateAssistantWebLinksPreview(assistantId: Long, links: List<WebLinkUi>) {
+        if (links.isEmpty()) return
+        val current = _messages.value ?: return
+        val idx = current.indexOfFirst { it.id == assistantId }
+        if (idx < 0) return
+        val old = current[idx]
+        if (old.webLinks.isNotEmpty()) return
+        val next = old.copy(webLinks = links)
         val list = current.toMutableList()
         list[idx] = next
         _messages.postValue(list)

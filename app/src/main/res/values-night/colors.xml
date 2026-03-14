@@ -1,4 +1,7 @@
 <resources>
     <!-- Drawer background: keep dark mode unchanged -->
     <color name="drawer_panel_bg">#121212</color>
+
+    <!-- Chip border (avoid theme attrs in drawable for API 19) -->
+    <color name="chip_stroke">#444444</color>
 </resources>
