@@ -1,9 +1,35 @@
-问题：
-2.添加终止输出按钮，在发送后原本发送按钮的位置，变成停止按钮，模型输出完后再变回来。
-3.底部的输入框及上面功能按钮，会挡住模型的输出，还有输出框底下的按钮，以及下一次用户发送出去的提示词框，请修复。
-4.所有配置在更改后，现在的版本有bug，必须新建对话才能使用最新配置，这是不对的。应该配置是实时同步的，如果我原有模型A，在开启新对话对话了1轮后，加入模型B，那么此时我应该可以选择模型B，在这个对话里面。现在的版本就不可以。
-5.你需要在设置里支持流式输出，支持切换3种模式：流式输出，兼容型流式输出（即以每n秒的速度（支持设置），输出模型在期间的一段话，以此减少老旧设备连续流式输出卡死的问题。），关闭流式输出。
-6.联网搜索数量不应该有上限，另外如开启联网搜索，需要在模型回复框的上面，有几个小小的横向的扁扁的胶囊形状的按钮，每个按钮对应一个链接。按钮是该网页的名字，点击后可跳转到对应的链接。搜索几个就列出几个胶囊，注意要细长的，节省空间。如果超过5个则折叠起来，点击位于他们下方，AI输出框上方的下箭头展开显示所有联网搜索的胶囊。
-7.现在的配置导出支持2种模式，一种是文件导出，需要弹窗显示导出位置。另一种是剪贴板导出，自动把当前配置导出到剪切板，用户可复制粘贴。导入也是支持文件导出和剪切板导入
-8.在高版本安卓（安卓12上无法显示图标），在安卓4上可以显示图标。图标文件是根目录/icon.png
-9.低版本安卓安装时，导入配置文件无法导入，所有文件均为灰色，不可选择。高版本正常，可自动过滤所有非json文件，并导入json.
+/home/runner/work/Nostalgia-AI/Nostalgia-AI/app/build/tmp/kapt3/stubs/release/com/haidianfirstteam/***ai/data/AppDatabase.java:5: warning: Schema export directory is not provided to the annotation processor so we cannot export the schema. You can either provide `room.schemaLocation` annotation processor argument OR set exportSchema to false.
+public abstract class AppDatabase extends androidx.room.RoomDatabase {
+                ^
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:115:48 Suspend function 'listAll' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:118:53 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:123:42 Suspend function 'listAll' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:127:50 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:134:47 Suspend function 'listAll' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:137:55 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:146:33 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:160:26 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:164:30 Suspend function 'put' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:165:52 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:168:62 Suspend function 'put' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:173:52 Suspend function 'listAll' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:176:61 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:187:46 Suspend function 'listAll' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:193:56 Suspend function 'insert' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/export/ImportExportRepository.kt:215:34 Suspend function 'insertAll' should be called only from a coroutine or another suspend function
+e: file:///home/runner/work/Nostalgia-AI/Nostalgia-AI/app/src/main/java/com/haidianfirstteam/***ai/ui/chat/ChatViewModel.kt:33:36 Unresolved reference: settingsRepository
+> Task :app:compileReleaseKotlin FAILED
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1773468416538.json
+FAILURE: Build failed with an exception.
+* What went wrong:
+Execution failed for task ':app:compileReleaseKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+32 actionable tasks: 32 executed
+* Get more help at https://help.gradle.org
+BUILD FAILED in 1m 33s
+Error: Process completed with exit code 1.

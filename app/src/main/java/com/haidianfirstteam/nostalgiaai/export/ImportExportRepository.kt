@@ -99,7 +99,7 @@ class ImportExportRepository(
         importBundle(bundle, overwrite)
     }
 
-    private fun importBundle(bundle: ExportBundle, overwrite: Boolean) {
+    private suspend fun importBundle(bundle: ExportBundle, overwrite: Boolean) {
         // Import strategy: if overwrite -> delete & insert; else upsert-like behavior.
         // v1 minimal: overwrite is not implemented.
         if (overwrite) {

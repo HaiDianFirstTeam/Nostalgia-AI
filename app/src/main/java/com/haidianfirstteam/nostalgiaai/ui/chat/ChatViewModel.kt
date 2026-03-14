@@ -30,7 +30,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val db: AppDatabase = (app as NostalgiaApp).db
     private val pipeline = ChatPipeline(app.applicationContext, db)
     private val attachmentStore = AttachmentStore(app.applicationContext, db)
-    private val settingsRepo = app.settingsRepository
+    private val settingsRepo = (app as NostalgiaApp).settingsRepository
 
     private val _conversationId = MutableLiveData<Long>()
     val conversationId: LiveData<Long> = _conversationId
