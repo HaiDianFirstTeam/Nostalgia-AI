@@ -144,7 +144,7 @@ class ImportExportActivity : AppCompatActivity() {
         // Use a broad picker then validate by extension/content after selection.
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "*/*"
-            addCategory(Intent.CATEGORY_DEFAULT)
+            addCategory(Intent.CATEGORY_OPENABLE)
         }
         startActivityForResult(intent, REQ_IMPORT)
     }

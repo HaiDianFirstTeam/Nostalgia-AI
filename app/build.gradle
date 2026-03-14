@@ -101,6 +101,8 @@ dependencies {
     implementation 'androidx.room:room-ktx:2.5.2'
 
     implementation 'com.squareup.okhttp3:okhttp:3.12.13'
+    // Modern TLS provider for legacy Android (API 16-19) to avoid handshake failures.
+    implementation 'org.conscrypt:conscrypt-android:2.5.2'
     implementation 'com.google.code.gson:gson:2.10.1'
 
     implementation 'androidx.preference:preference-ktx:1.2.1'
