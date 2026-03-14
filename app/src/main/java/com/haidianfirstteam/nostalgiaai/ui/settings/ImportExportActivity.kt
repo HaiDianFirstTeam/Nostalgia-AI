@@ -160,25 +160,32 @@ class ImportExportActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle("从剪贴板导入")
             .setView(input)
-            .setPositiveButton("导入") { _, _ ->
+            .setPositiveButton("下一步") { _, _ ->
                 val text = input.text?.toString() ?: ""
                 if (text.trim().isEmpty()) return@setPositiveButton
-                val app = application as NostalgiaApp
-                val repo = ImportExportRepository(this, app.db)
-                CoroutineScope(Dispatchers.Main).launch {
-                    try {
-                        withContext(Dispatchers.IO) { repo.importFromJson(text, overwrite = false) }
-                        MaterialAlertDialogBuilder(this@ImportExportActivity)
-                            .setMessage("导入完成")
-                            .setPositiveButton("确定", null)
-                            .show()
-                    } catch (e: Exception) {
-                        MaterialAlertDialogBuilder(this@ImportExportActivity)
-                            .setMessage("导入失败：${e.message}")
-                            .setPositiveButton("确定", null)
-                            .show()
+                val options = arrayOf("追加（推荐）", "覆盖")
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("导入方式")
+                    .setItems(options) { _, which ->
+                        val overwrite = which == 1
+                        val app = application as NostalgiaApp
+                        val repo = ImportExportRepository(this, app.db)
+                        CoroutineScope(Dispatchers.Main).launch {
+                            try {
+                                withContext(Dispatchers.IO) { repo.importFromJson(text, overwrite = overwrite) }
+                                MaterialAlertDialogBuilder(this@ImportExportActivity)
+                                    .setMessage("导入完成")
+                                    .setPositiveButton("确定", null)
+                                    .show()
+                            } catch (e: Exception) {
+                                MaterialAlertDialogBuilder(this@ImportExportActivity)
+                                    .setMessage("导入失败：${e.message}")
+                                    .setPositiveButton("确定", null)
+                                    .show()
+                            }
+                        }
                     }
-                }
+                    .show()
             }
             .setNegativeButton("取消", null)
             .show()

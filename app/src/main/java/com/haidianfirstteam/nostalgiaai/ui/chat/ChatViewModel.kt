@@ -71,7 +71,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (_requestState.value?.inFlight == true) return
 
         viewModelScope.launch {
-            _requestState.value = RequestState(true, getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.status_requesting))
+            try {
+                _requestState.value = RequestState(true, getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.status_requesting))
             val now = System.currentTimeMillis()
             var userMsgId: Long = -1
             withContext(Dispatchers.IO) {
@@ -104,8 +105,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     if (userMsg != null) {
                         _requestState.value = RequestState(true, getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.status_calling_model))
 
-                        val streamMode = settingsRepo.getStreamModeBlocking()
-                        val compatMs = settingsRepo.getCompatStreamIntervalMsBlocking()
+                        val (streamMode, compatMs) = withContext(Dispatchers.IO) {
+                            val mode = settingsRepo.getStreamModeBlocking()
+                            val ms = settingsRepo.getCompatStreamIntervalMsBlocking()
+                            Pair(mode, ms)
+                        }
 
                         if (streamMode == "off") {
                             val out = try {
@@ -257,6 +261,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             runningJob = job
+            } catch (e: Exception) {
+                // Never crash UI on send.
+                _requestState.postValue(RequestState(false, ""))
+                // Best-effort: show error as a toast via application context.
+                try {
+                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(getApplication(), "发送失败：${e.message ?: "未知错误"}")
+                } catch (_: Exception) {
+                    // ignore
+                }
+            }
         }
     }
 

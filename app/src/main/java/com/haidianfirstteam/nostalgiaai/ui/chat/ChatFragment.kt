@@ -82,7 +82,7 @@ class ChatFragment : Fragment() {
                 return@setOnClickListener
             }
             val text = binding.etInput.text?.toString() ?: ""
-            binding.etInput.setText("")
+            // Clear input only when we are sure a request will be sent
 
             if (text.trim().isEmpty() && attachments.isEmpty()) {
                 ToastUtil.show(requireContext(), "请输入内容或选择文件")
@@ -98,6 +98,8 @@ class ChatFragment : Fragment() {
             val pickedAttachments = ArrayList(attachments)
             attachments.clear()
             renderAttachmentSummary()
+
+            binding.etInput.setText("")
 
             when (val t = sel.target) {
                 is ChatTarget.Group -> chatVm.sendUserMessage(
@@ -206,6 +208,7 @@ class ChatFragment : Fragment() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
                 "application/pdf",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -274,33 +277,33 @@ class ChatFragment : Fragment() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_PICK_FILE && data != null) {
-            val uri: Uri = data.data ?: return
-            try {
-                // Persist permission when possible
-                val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                requireContext().contentResolver.takePersistableUriPermission(uri, flags)
-            } catch (_: Exception) {
-                // ignore
+            val uris = ArrayList<Uri>()
+            data.data?.let { uris.add(it) }
+            val clip = data.clipData
+            if (clip != null) {
+                for (i in 0 until clip.itemCount) {
+                    val u = clip.getItemAt(i).uri
+                    if (u != null) uris.add(u)
+                }
             }
-            val picked = FileUtil.getPickedFile(requireContext(), uri)
-            attachments.add(picked)
+
+            if (uris.isEmpty()) return
+
+            uris.forEach { uri ->
+                try {
+                    // Persist permission when possible
+                    val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    requireContext().contentResolver.takePersistableUriPermission(uri, flags)
+                } catch (_: Exception) {
+                    // ignore
+                }
+                val picked = FileUtil.getPickedFile(requireContext(), uri)
+                attachments.add(picked)
+            }
             renderAttachmentSummary()
 
-            // For text models later: extract text now so user sees result
-            val prepared = AttachmentProcessor.prepare(requireContext(), picked)
-            if (prepared.kind == AttachmentProcessor.Kind.TEXT && !prepared.extractedText.isNullOrEmpty()) {
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("已解析文本")
-                    .setMessage(prepared.extractedText.take(1500))
-                    .setPositiveButton("确定", null)
-                    .show()
-            } else if (!prepared.error.isNullOrBlank()) {
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("文件提示")
-                    .setMessage(prepared.error)
-                    .setPositiveButton("确定", null)
-                    .show()
-            }
+            // Show delete UI for attachments
+            showAttachmentManageDialog()
         }
 
         if (requestCode == REQ_TAKE_PHOTO) {
@@ -335,6 +338,29 @@ class ChatFragment : Fragment() {
         }
         if (attachments.size > 3) sb.append("\n...")
         binding.tvAttachments.text = sb.toString()
+    }
+
+    private fun showAttachmentManageDialog() {
+        if (attachments.isEmpty()) return
+        val names = attachments.map { it.displayName }.toTypedArray()
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("已选择文件（点击删除）")
+            .setItems(names) { _, which ->
+                if (which >= 0 && which < attachments.size) {
+                    attachments.removeAt(which)
+                    renderAttachmentSummary()
+                    // re-open if still has items for quick batch delete
+                    if (attachments.isNotEmpty()) {
+                        showAttachmentManageDialog()
+                    }
+                }
+            }
+            .setPositiveButton("清空") { _, _ ->
+                attachments.clear()
+                renderAttachmentSummary()
+            }
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     private fun renderWebSearchButton() {
