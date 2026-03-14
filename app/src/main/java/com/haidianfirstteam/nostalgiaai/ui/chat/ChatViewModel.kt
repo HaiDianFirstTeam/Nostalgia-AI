@@ -65,7 +65,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         val convId = _conversationId.value ?: return
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty() && pickedAttachments.isEmpty()) return
 
         // prevent spamming multiple requests
         if (_requestState.value?.inFlight == true) return
@@ -183,59 +183,70 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             var webLinks: List<com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.WebLink> = emptyList()
 
                             val mode = if (streamMode == "compat") ChatPipeline.StreamMode.COMPAT else ChatPipeline.StreamMode.ON
-                            val handle = pipeline.runStream(
-                                userMessage = userMsg,
-                                mode = mode,
-                                compatIntervalMs = compatMs,
-                                onStart = { out0 ->
-                                    routedProviderId = out0.routedProviderId
-                                    routedApiKeyId = out0.routedApiKeyId
-                                    routedModelId = out0.routedModelId
-                                    webLinks = out0.webLinks
-                                },
-                                onDeltaText = { delta ->
-                                    sb.append(delta)
-                                    val textNow = sb.toString()
-                                    val encodedNow = if (webLinks.isNotEmpty()) {
-                                        WebLinksCodec.encode(webLinks.map { WebLinkUi(it.title, it.url) }, textNow)
-                                    } else textNow
-                                    viewModelScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            val msg = db.messages().getById(assistantId) ?: return@withContext
-                                            db.messages().update(msg.copy(content = encodedNow))
-                                        }
-                                        refreshMessages(convId)
-                                    }
-                                },
-                                onDone = { _ ->
-                                    viewModelScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            val msg = db.messages().getById(assistantId) ?: return@withContext
-                                            db.messages().update(
-                                                msg.copy(
-                                                    routedProviderId = routedProviderId,
-                                                    routedApiKeyId = routedApiKeyId,
-                                                    routedModelId = routedModelId
-                                                )
-                                            )
-                                            db.conversations().touch(convId, System.currentTimeMillis())
-                                        }
-                                        refreshMessages(convId)
-                                    }
-                                },
-                                onError = { err ->
-                                    viewModelScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            val msg = db.messages().getById(assistantId) ?: return@withContext
-                                            if (msg.content.isBlank()) {
-                                                db.messages().update(msg.copy(content = "请求失败：${err}"))
+                            try {
+                                val handle = pipeline.runStream(
+                                    userMessage = userMsg,
+                                    mode = mode,
+                                    compatIntervalMs = compatMs,
+                                    onStart = { out0 ->
+                                        routedProviderId = out0.routedProviderId
+                                        routedApiKeyId = out0.routedApiKeyId
+                                        routedModelId = out0.routedModelId
+                                        webLinks = out0.webLinks
+                                    },
+                                    onDeltaText = { delta ->
+                                        sb.append(delta)
+                                        val textNow = sb.toString()
+                                        val encodedNow = if (webLinks.isNotEmpty()) {
+                                            WebLinksCodec.encode(webLinks.map { WebLinkUi(it.title, it.url) }, textNow)
+                                        } else textNow
+                                        viewModelScope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                val msg = db.messages().getById(assistantId) ?: return@withContext
+                                                db.messages().update(msg.copy(content = encodedNow))
                                             }
+                                            refreshMessages(convId)
                                         }
-                                        refreshMessages(convId)
+                                    },
+                                    onDone = { _ ->
+                                        viewModelScope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                val msg = db.messages().getById(assistantId) ?: return@withContext
+                                                db.messages().update(
+                                                    msg.copy(
+                                                        routedProviderId = routedProviderId,
+                                                        routedApiKeyId = routedApiKeyId,
+                                                        routedModelId = routedModelId
+                                                    )
+                                                )
+                                                db.conversations().touch(convId, System.currentTimeMillis())
+                                            }
+                                            refreshMessages(convId)
+                                        }
+                                    },
+                                    onError = { err ->
+                                        viewModelScope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                val msg = db.messages().getById(assistantId) ?: return@withContext
+                                                if (msg.content.isBlank()) {
+                                                    db.messages().update(msg.copy(content = "请求失败：${err}"))
+                                                }
+                                            }
+                                            refreshMessages(convId)
+                                        }
+                                    }
+                                )
+                                runningCall = handle.call
+                            } catch (e: Exception) {
+                                // Never crash the app on stream setup failure.
+                                withContext(Dispatchers.IO) {
+                                    val msg = db.messages().getById(assistantId) ?: return@withContext
+                                    if (msg.content.isBlank()) {
+                                        db.messages().update(msg.copy(content = "请求失败：${e.message ?: "未知错误"}"))
                                     }
                                 }
-                            )
-                            runningCall = handle.call
+                                refreshMessages(convId)
+                            }
                         }
                     }
                 } finally {

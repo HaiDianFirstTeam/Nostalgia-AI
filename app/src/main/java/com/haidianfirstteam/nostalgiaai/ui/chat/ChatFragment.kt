@@ -89,13 +89,17 @@ class ChatFragment : Fragment() {
                 return@setOnClickListener
             }
             val sel = settingsVm.selected.value
+            if (sel?.target == null) {
+                ToastUtil.show(requireContext(), "请先选择模型/组")
+                return@setOnClickListener
+            }
             val webEnabled = webSearchEnabled
             val webCount = webSearchCount
             val pickedAttachments = ArrayList(attachments)
             attachments.clear()
             renderAttachmentSummary()
 
-            when (val t = sel?.target) {
+            when (val t = sel.target) {
                 is ChatTarget.Group -> chatVm.sendUserMessage(
                     text = text,
                     targetType = "group",
@@ -113,7 +117,6 @@ class ChatFragment : Fragment() {
                     webSearchCount = webCount,
                     pickedAttachments = pickedAttachments
                 )
-                null -> chatVm.sendUserMessage(text, pickedAttachments = pickedAttachments)
             }
         }
 
