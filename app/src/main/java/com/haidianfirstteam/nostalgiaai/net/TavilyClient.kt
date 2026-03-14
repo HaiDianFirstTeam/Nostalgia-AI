@@ -56,6 +56,7 @@ data class TavilySearchRequest(
     @SerializedName("api_key") val apiKey: String,
     @SerializedName("query") val query: String,
     @SerializedName("max_results") val maxResults: Int,
+    @SerializedName("search_depth") val searchDepth: String = "basic",
     @SerializedName("include_answer") val includeAnswer: Boolean = false,
     @SerializedName("include_images") val includeImages: Boolean = false,
     @SerializedName("include_raw_content") val includeRawContent: Boolean = false

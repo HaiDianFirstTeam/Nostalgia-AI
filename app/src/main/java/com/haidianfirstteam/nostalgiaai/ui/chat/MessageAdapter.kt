@@ -96,27 +96,56 @@ class MessageAdapter(
                 fun renderChips() {
                     b.chipsContainer.removeAllViews()
                     val list = if (!expanded && item.webLinks.size > 5) item.webLinks.take(5) else item.webLinks
-                    list.forEach { link ->
-                        val tv = android.widget.TextView(ctx)
-                        tv.text = link.title
-                        tv.setSingleLine(true)
-                        tv.ellipsize = android.text.TextUtils.TruncateAt.END
-                        tv.setPadding(24, 10, 24, 10)
-                        tv.setBackgroundResource(com.haidianfirstteam.nostalgiaai.R.drawable.bg_chip)
-                        // Keep default theme text color; border already tinted.
-                        val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                        lp.setMargins(0, 0, 12, 12)
-                        tv.layoutParams = lp
-                        tv.setOnClickListener {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.url))
-                                ctx.startActivity(intent)
-                            } catch (_: Exception) {
-                                // ignore
-                            }
+                    if (!expanded) {
+                        // single row with horizontal scroll
+                        list.forEach { link ->
+                            b.chipsContainer.addView(makeChip(ctx, link))
                         }
-                        b.chipsContainer.addView(tv)
+                        b.chipsScroll.isHorizontalScrollBarEnabled = false
+                    } else {
+                        // multi-row: render as vertical rows of chips
+                        // Simple heuristic: 3 chips per row.
+                        val rowSize = 3
+                        var row: LinearLayout? = null
+                        list.forEachIndexed { idx, link ->
+                            if (idx % rowSize == 0) {
+                                row = LinearLayout(ctx).apply {
+                                    orientation = LinearLayout.HORIZONTAL
+                                    layoutParams = LinearLayout.LayoutParams(
+                                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                                        LinearLayout.LayoutParams.WRAP_CONTENT
+                                    )
+                                }
+                                b.chipsContainer.addView(row)
+                            }
+                            row?.addView(makeChip(ctx, link))
+                        }
+                        b.chipsScroll.isHorizontalScrollBarEnabled = false
                     }
+                }
+
+                fun makeChip(ctx: Context, link: WebLinkUi): View {
+                    val tv = android.widget.TextView(ctx)
+                    tv.text = link.title
+                    tv.setSingleLine(true)
+                    tv.ellipsize = android.text.TextUtils.TruncateAt.END
+                    tv.setPadding(24, 10, 24, 10)
+                    tv.setBackgroundResource(com.haidianfirstteam.nostalgiaai.R.drawable.bg_chip)
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    lp.setMargins(0, 0, 12, 12)
+                    tv.layoutParams = lp
+                    tv.setOnClickListener {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.url))
+                            ctx.startActivity(intent)
+                        } catch (_: Exception) {
+                            // ignore
+                        }
+                    }
+                    return tv
                 }
 
                 renderChips()

@@ -191,6 +191,7 @@ class ChatPipeline(
         userMessage: MessageEntity,
         mode: StreamMode,
         compatIntervalMs: Long,
+        onCallReady: (Call) -> Unit,
         onStart: (Output) -> Unit,
         onDeltaText: (String) -> Unit,
         onDone: (Output) -> Unit,
@@ -231,6 +232,13 @@ class ChatPipeline(
         fun buildMessages(isMultimodalModel: Boolean): List<OpenAiMessage> {
             val messages = ArrayList<OpenAiMessage>()
             if (!webContext.isNullOrBlank()) {
+                // Encourage grounded answers when web search is enabled.
+                messages.add(
+                    OpenAiMessage(
+                        "system",
+                        "你必须基于下面的联网搜索结果来回答。如果搜索结果里没有相关信息，请明确说明无法从搜索结果中得到答案，不要编造。"
+                    )
+                )
                 messages.add(OpenAiMessage("system", "联网搜索结果：\n${webContext}"))
             }
             val currentUserId = history.lastOrNull { it.role == "user" }?.id
@@ -279,8 +287,6 @@ class ChatPipeline(
                 onStart(out0)
 
                 val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
-                // Execute streaming on a background thread and return the Call immediately.
-                // OkHttp Call is created once; we can cancel it from UI.
                 val req0 = OpenAiChatRequest(
                     model = model.modelName,
                     messages = buildMessages(model.multimodal),
@@ -288,7 +294,63 @@ class ChatPipeline(
                     stream = true
                 )
                 val call = client.createChatCompletionsStreamCall(req0)
-                Thread {
+                onCallReady(call)
+                try {
+                    client.executeChatCompletionsStream(call) { chunk ->
+                        when {
+                            chunk.done -> {
+                                emitBuffered(force = true)
+                                onDone(out0)
+                            }
+                            chunk.error != null -> {
+                                emitBuffered(force = true)
+                                onError(chunk.error)
+                            }
+                            chunk.deltaText != null -> {
+                                if (intervalMs > 0) {
+                                    buffer.append(chunk.deltaText)
+                                    emitBuffered(force = false)
+                                } else {
+                                    onDeltaText(chunk.deltaText)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    emitBuffered(force = true)
+                    onError(e.message ?: "stream error")
+                }
+                return@withContext StreamHandle(call, providerId, keys[0].id, modelId)
+            }
+
+            "group" -> {
+                val groupId = userMessage.targetGroupId ?: run {
+                    onError("missing groupId")
+                    throw IllegalStateException("missing groupId")
+                }
+                val ordered = providerPriorityManager.orderedProvidersForGroup(groupId)
+                if (ordered.isEmpty()) {
+                    onError("group has no providers configured")
+                    throw IllegalStateException("group has no providers configured")
+                }
+                // pick first provider with keys
+                for (gp in ordered) {
+                    val provider = db.providers().getById(gp.providerId) ?: continue
+                    val model = db.models().getById(gp.modelId) ?: continue
+                    val keys = directKeyPicker.pickKeys(gp.providerId)
+                    if (keys.isEmpty()) continue
+
+                    val out0 = Output(text = "", routedProviderId = gp.providerId, routedApiKeyId = keys[0].id, routedModelId = gp.modelId, webLinks = webLinks)
+                    onStart(out0)
+                    val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
+                    val req0 = OpenAiChatRequest(
+                        model = model.modelName,
+                        messages = buildMessages(model.multimodal),
+                        temperature = 0.7,
+                        stream = true
+                    )
+                    val call = client.createChatCompletionsStreamCall(req0)
+                    onCallReady(call)
                     try {
                         client.executeChatCompletionsStream(call) { chunk ->
                             when {
@@ -314,64 +376,6 @@ class ChatPipeline(
                         emitBuffered(force = true)
                         onError(e.message ?: "stream error")
                     }
-                }.start()
-                return@withContext StreamHandle(call, providerId, keys[0].id, modelId)
-            }
-
-            "group" -> {
-                val groupId = userMessage.targetGroupId ?: run {
-                    onError("missing groupId")
-                    throw IllegalStateException("missing groupId")
-                }
-                val ordered = providerPriorityManager.orderedProvidersForGroup(groupId)
-                if (ordered.isEmpty()) {
-                    onError("group has no providers configured")
-                    throw IllegalStateException("group has no providers configured")
-                }
-                // pick first provider with keys
-                for (gp in ordered) {
-                    val provider = db.providers().getById(gp.providerId) ?: continue
-                    val model = db.models().getById(gp.modelId) ?: continue
-                    val keys = directKeyPicker.pickKeys(gp.providerId)
-                    if (keys.isEmpty()) continue
-
-                    val out0 = Output(text = "", routedProviderId = gp.providerId, routedApiKeyId = keys[0].id, routedModelId = gp.modelId, webLinks = webLinks)
-                    onStart(out0)
-                val client = OpenAiClient(provider.baseUrl, keys[0].apiKey)
-                    val req0 = OpenAiChatRequest(
-                        model = model.modelName,
-                        messages = buildMessages(model.multimodal),
-                        temperature = 0.7,
-                        stream = true
-                    )
-                    val call = client.createChatCompletionsStreamCall(req0)
-                    Thread {
-                        try {
-                            client.executeChatCompletionsStream(call) { chunk ->
-                                when {
-                                    chunk.done -> {
-                                        emitBuffered(force = true)
-                                        onDone(out0)
-                                    }
-                                    chunk.error != null -> {
-                                        emitBuffered(force = true)
-                                        onError(chunk.error)
-                                    }
-                                    chunk.deltaText != null -> {
-                                        if (intervalMs > 0) {
-                                            buffer.append(chunk.deltaText)
-                                            emitBuffered(force = false)
-                                        } else {
-                                            onDeltaText(chunk.deltaText)
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            emitBuffered(force = true)
-                            onError(e.message ?: "stream error")
-                        }
-                    }.start()
                     return@withContext StreamHandle(call, gp.providerId, keys[0].id, gp.modelId)
                 }
 
@@ -404,6 +408,12 @@ class ChatPipeline(
 
             val messages = ArrayList<OpenAiMessage>()
             if (!webContext.isNullOrBlank()) {
+                messages.add(
+                    OpenAiMessage(
+                        "system",
+                        "你必须基于下面的联网搜索结果来回答。如果搜索结果里没有相关信息，请明确说明无法从搜索结果中得到答案，不要编造。"
+                    )
+                )
                 messages.add(OpenAiMessage("system", "联网搜索结果：\n${webContext}"))
             }
 

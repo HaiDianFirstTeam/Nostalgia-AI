@@ -191,10 +191,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                             val mode = if (streamMode == "compat") ChatPipeline.StreamMode.COMPAT else ChatPipeline.StreamMode.ON
                             try {
-                                val handle = pipeline.runStream(
+                                pipeline.runStream(
                                     userMessage = userMsg,
                                     mode = mode,
                                     compatIntervalMs = compatMs,
+                                    onCallReady = { call ->
+                                        runningCall = call
+                                    },
                                     onStart = { out0 ->
                                         routedProviderId = out0.routedProviderId
                                         routedApiKeyId = out0.routedApiKeyId
@@ -244,7 +247,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                 }
                             )
-                                runningCall = handle.call
                             } catch (e: Exception) {
                                 // Never crash the app on stream setup failure.
                                 withContext(Dispatchers.IO) {
