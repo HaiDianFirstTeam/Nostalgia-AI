@@ -22,7 +22,7 @@ data class ConversationEntity(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("conversationId"), Index("createdAt")]
+    indices = [Index("conversationId"), Index("createdAt"), Index("parentId")]
 )
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
