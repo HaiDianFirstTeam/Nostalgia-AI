@@ -41,6 +41,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _messages = MutableLiveData<List<MessageUi>>(emptyList())
     val messages: LiveData<List<MessageUi>> = _messages
 
+    // Cache active leaf in-memory to avoid race between branch switching and sending.
+    // (Switching variants is async; without a cache, send may read stale activeLeafMessageId.)
+    @Volatile
+    private var activeLeafIdCache: Long? = null
+
 
     private val _requestState = MutableLiveData<RequestState>(RequestState(false, ""))
     val requestState: LiveData<RequestState> = _requestState
@@ -58,6 +63,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadConversation(conversationId: Long) {
         _conversationId.value = conversationId
+        activeLeafIdCache = null
         // Observe via Room LiveData would be better; keep simple for now.
         viewModelScope.launch {
             refreshMessages(conversationId)
@@ -90,7 +96,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // Ensure conversation still exists (it may have been cleaned up unexpectedly)
                 val conv = db.conversations().getById(convId)
                 if (conv == null) throw IllegalStateException("conversation missing")
-                val parentId = conv.activeLeafMessageId
+                val parentId = activeLeafIdCache ?: conv.activeLeafMessageId
                 val shouldUpdateTitle = parentId == null
                 userMsgId = db.messages().insert(
                     MessageEntity(
@@ -109,6 +115,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 db.conversations().touch(convId, now)
                 db.conversations().setActiveLeaf(convId, userMsgId)
+                activeLeafIdCache = userMsgId
 
                 // Set conversation title to first user prompt snippet.
                 if (shouldUpdateTitle) {
@@ -219,6 +226,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 ).also { newAssistantId ->
                     db.conversations().setActiveLeaf(conversationId, newAssistantId)
+                    activeLeafIdCache = newAssistantId
                 }
                 db.conversations().touch(conversationId, System.currentTimeMillis())
             }
@@ -245,6 +253,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 )
             )
             db.conversations().setActiveLeaf(conversationId, assistantId)
+            activeLeafIdCache = assistantId
             db.conversations().touch(conversationId, System.currentTimeMillis())
         }
         runningAssistantMessageId = assistantId
@@ -433,6 +442,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val startId = siblings[nextIdx].id
                 val newLeaf = latestLeafFrom(convId, startId)
                 db.conversations().setActiveLeaf(convId, newLeaf)
+                activeLeafIdCache = newLeaf
                 true
             }
             if (changed) refreshMessages(convId)
@@ -486,6 +496,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 userId?.let { db.messages().deleteById(it) }
                 assistantId?.let { db.messages().deleteById(it) }
                 db.conversations().setActiveLeaf(convId, newLeaf)
+                activeLeafIdCache = newLeaf
                 db.conversations().touch(convId, System.currentTimeMillis())
             }
             refreshMessages(convId)
@@ -563,6 +574,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 )
                 db.conversations().setActiveLeaf(convId, id)
+                activeLeafIdCache = id
                 db.conversations().touch(convId, now)
                 id
             }
@@ -605,6 +617,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val list = withContext(Dispatchers.IO) {
             val conv = db.conversations().getById(conversationId)
             val leafId = conv?.activeLeafMessageId
+            activeLeafIdCache = leafId
             if (leafId == null) {
                 db.messages().listByConversation(conversationId)
             } else {

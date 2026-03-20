@@ -131,7 +131,8 @@ dependencies {
 def computeVersionName() {
     def tag = System.getenv('GITHUB_REF_NAME')
     if (tag == null || tag.trim().isEmpty()) {
-        return '0.0.0-dev'
+        // Default local version when not building from a tag.
+        return '0.3.9.3'
     }
     tag = tag.trim()
     if (tag.startsWith('v') || tag.startsWith('V')) {

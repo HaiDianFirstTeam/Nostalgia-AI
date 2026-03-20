@@ -58,8 +58,7 @@ class ChatPipeline(
      */
     suspend fun runOnce(userMessage: MessageEntity): Result<Output> = withContext(Dispatchers.IO) {
         try {
-            val convId = userMessage.conversationId
-            val history = db.messages().listByConversation(convId)
+            val history = loadBranchHistory(userMessage)
 
             val attachments = attachmentStore.loadForMessage(userMessage.id)
 
@@ -185,6 +184,21 @@ class ChatPipeline(
         }
     }
 
+    private suspend fun loadBranchHistory(leaf: MessageEntity): List<MessageEntity> {
+        // IMPORTANT: Branching chat uses parentId pointers. We must build history from
+        // the active branch path, not the entire conversation, otherwise context will mix.
+        val out = ArrayList<MessageEntity>()
+        var cur: MessageEntity? = leaf
+        var guard = 0
+        while (cur != null && guard++ < 5000) {
+            out.add(cur)
+            val pid = cur.parentId ?: break
+            cur = db.messages().getById(pid)
+        }
+        out.reverse()
+        return out
+    }
+
     data class StreamHandle(
         val call: Call,
         val routedProviderId: Long? = null,
@@ -228,8 +242,7 @@ class ChatPipeline(
             }
         }
 
-        val convId = userMessage.conversationId
-        val history = db.messages().listByConversation(convId)
+        val history = loadBranchHistory(userMessage)
         val attachments = attachmentStore.loadForMessage(userMessage.id)
 
         val webEnabled = userMessage.webSearchEnabled
