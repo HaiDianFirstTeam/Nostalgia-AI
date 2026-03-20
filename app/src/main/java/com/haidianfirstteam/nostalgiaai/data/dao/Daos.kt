@@ -48,6 +48,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId=:conversationId AND parentId=:parentId ORDER BY createdAt ASC, id ASC")
     suspend fun listChildren(conversationId: Long, parentId: Long): List<MessageEntity>
 
+    @Query("SELECT * FROM messages WHERE conversationId=:conversationId AND parentId IN (:parentIds) ORDER BY createdAt ASC, id ASC")
+    suspend fun listChildrenForParents(conversationId: Long, parentIds: List<Long>): List<MessageEntity>
+
     @Query("SELECT * FROM messages")
     suspend fun listAll(): List<MessageEntity>
 

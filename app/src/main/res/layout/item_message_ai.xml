@@ -51,6 +51,44 @@
 		android:background="@drawable/bg_bubble_ai"
 		android:textColor="?android:attr/textColorPrimary" />
 
+	<LinearLayout
+		android:id="@+id/branchBar"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:layout_marginTop="4dp"
+		android:orientation="horizontal"
+		android:gravity="center_vertical"
+		android:visibility="gone">
+
+		<androidx.appcompat.widget.AppCompatImageButton
+			android:id="@+id/btnBranchPrev"
+			android:layout_width="32dp"
+			android:layout_height="32dp"
+			android:background="@android:color/transparent"
+			android:contentDescription="上一分支"
+			app:srcCompat="@android:drawable/ic_media_previous"
+			app:tint="?attr/colorControlNormal" />
+
+		<TextView
+			android:id="@+id/tvBranchInfo"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:alpha="0.7"
+			android:textSize="12sp"
+			android:text="1/1"
+			android:paddingLeft="4dp"
+			android:paddingRight="4dp" />
+
+		<androidx.appcompat.widget.AppCompatImageButton
+			android:id="@+id/btnBranchNext"
+			android:layout_width="32dp"
+			android:layout_height="32dp"
+			android:background="@android:color/transparent"
+			android:contentDescription="下一分支"
+			app:srcCompat="@android:drawable/ic_media_next"
+			app:tint="?attr/colorControlNormal" />
+	</LinearLayout>
+
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

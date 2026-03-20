@@ -27,11 +27,6 @@ data class RequestState(
     val statusText: String = ""
 )
 
-data class BranchNavState(
-    val enabled: Boolean,
-    val index: Int,
-    val total: Int
-)
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -46,8 +41,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _messages = MutableLiveData<List<MessageUi>>(emptyList())
     val messages: LiveData<List<MessageUi>> = _messages
 
-    private val _branchNav = MutableLiveData<BranchNavState>(BranchNavState(false, 1, 1))
-    val branchNav: LiveData<BranchNavState> = _branchNav
 
     private val _requestState = MutableLiveData<RequestState>(RequestState(false, ""))
     val requestState: LiveData<RequestState> = _requestState
@@ -421,27 +414,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _requestState.postValue(RequestState(false, ""))
     }
 
-    fun switchBranch(delta: Int) {
+    fun switchMessageVariant(messageId: Long, delta: Int) {
         val convId = _conversationId.value ?: return
         viewModelScope.launch {
             val changed = withContext(Dispatchers.IO) {
-                val conv = db.conversations().getById(convId) ?: return@withContext false
-                val leafId = conv.activeLeafMessageId ?: return@withContext false
-                val nav = computeBranchNavState(convId, leafId)
-                if (!nav.enabled || nav.total <= 1) return@withContext false
-
-                val pivot = navPivot(convId, leafId) ?: return@withContext false
-                val (siblings, currentIdx) = pivot
-                val nextIdxRaw = currentIdx + if (delta >= 0) 1 else -1
+                val msg = db.messages().getById(messageId) ?: return@withContext false
+                if (msg.conversationId != convId) return@withContext false
+                val siblings = if (msg.parentId == null) {
+                    db.messages().listRoots(convId)
+                } else {
+                    db.messages().listChildren(convId, msg.parentId)
+                }
+                if (siblings.size <= 1) return@withContext false
+                val idx = siblings.indexOfFirst { it.id == msg.id }
+                if (idx < 0) return@withContext false
+                val nextIdxRaw = idx + if (delta >= 0) 1 else -1
                 val nextIdx = ((nextIdxRaw % siblings.size) + siblings.size) % siblings.size
                 val startId = siblings[nextIdx].id
                 val newLeaf = latestLeafFrom(convId, startId)
                 db.conversations().setActiveLeaf(convId, newLeaf)
                 true
             }
-            if (changed) {
-                refreshMessages(convId)
-            }
+            if (changed) refreshMessages(convId)
         }
     }
 
@@ -509,38 +503,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return curId
     }
 
-    // Returns siblings list and current index for the nearest pivot.
-    private suspend fun navPivot(conversationId: Long, leafId: Long): Pair<List<MessageEntity>, Int>? {
-        // 1) Walk up from leaf and find first node that has siblings under the same parent.
-        var curId: Long? = leafId
-        var guard = 0
-        while (curId != null && guard++ < 5000) {
-            val cur = db.messages().getById(curId) ?: return null
-            val parentId = cur.parentId
-            if (parentId != null) {
-                val siblings = db.messages().listChildren(conversationId, parentId)
-                if (siblings.size > 1) {
-                    val idx = siblings.indexOfFirst { it.id == cur.id }
-                    if (idx >= 0) return Pair(siblings, idx)
-                }
-            } else {
-                // root: check multiple roots
-                val roots = db.messages().listRoots(conversationId)
-                if (roots.size > 1) {
-                    val idx = roots.indexOfFirst { it.id == cur.id }
-                    if (idx >= 0) return Pair(roots, idx)
-                }
-            }
-            curId = cur.parentId
-        }
-        return null
-    }
-
-    private suspend fun computeBranchNavState(conversationId: Long, leafId: Long): BranchNavState {
-        val pivot = navPivot(conversationId, leafId) ?: return BranchNavState(false, 1, 1)
-        val total = pivot.first.size
-        return if (total <= 1) BranchNavState(false, 1, 1) else BranchNavState(true, pivot.second + 1, total)
-    }
 
     // Placeholder for real pipeline:
     // - If pure text model: append extractedText from attachments into prompt
@@ -659,21 +621,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 out
             }
         }
-        _messages.value = list.map { it.toUi() }
 
-        // Update branch navigation state.
-        viewModelScope.launch(Dispatchers.IO) {
-            val conv = db.conversations().getById(conversationId) ?: return@launch
-            val leafId = conv.activeLeafMessageId ?: run {
-                _branchNav.postValue(BranchNavState(false, 1, 1))
-                return@launch
-            }
-            val st = computeBranchNavState(conversationId, leafId)
-            _branchNav.postValue(st)
+        // Build per-message branch metadata in batch.
+        val roots = withContext(Dispatchers.IO) { db.messages().listRoots(conversationId) }
+        val parentIds = list.mapNotNull { it.parentId }.distinct()
+        val children = if (parentIds.isNotEmpty()) {
+            withContext(Dispatchers.IO) { db.messages().listChildrenForParents(conversationId, parentIds) }
+        } else emptyList()
+        val grouped = children.groupBy { it.parentId }
+
+        _messages.value = list.map { ent ->
+            val sibs = if (ent.parentId == null) roots else (grouped[ent.parentId] ?: listOf(ent))
+            val idx = sibs.indexOfFirst { it.id == ent.id }.let { if (it < 0) 0 else it }
+            val enabled = sibs.size > 1
+            ent.toUi(branchEnabled = enabled, branchIndex = idx + 1, branchTotal = sibs.size)
         }
     }
 
-    private fun MessageEntity.toUi(): MessageUi {
+    private fun MessageEntity.toUi(
+        branchEnabled: Boolean,
+        branchIndex: Int,
+        branchTotal: Int
+    ): MessageUi {
         // If assistant message contains embedded web links header, parse it.
         // Format (inserted by us):
         // [WEB_LINKS]
@@ -687,7 +656,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             role = role,
             content = parsed.content,
             createdAt = createdAt,
-            webLinks = parsed.links
+            webLinks = parsed.links,
+            branchEnabled = branchEnabled,
+            branchIndex = branchIndex,
+            branchTotal = branchTotal
         )
     }
 }

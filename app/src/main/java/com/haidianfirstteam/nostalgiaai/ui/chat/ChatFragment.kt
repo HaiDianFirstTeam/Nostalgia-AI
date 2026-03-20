@@ -77,6 +77,9 @@ class ChatFragment : Fragment() {
             },
             onDeletePair = { msg ->
                 chatVm.deleteMessagePair(msg.id)
+            },
+            onSwitchVariant = { msg, delta ->
+                chatVm.switchMessageVariant(msg.id, delta)
             }
         )
 
@@ -141,9 +144,6 @@ class ChatFragment : Fragment() {
         }
         binding.btnTarget.setOnClickListener { showTargetPickerDialog() }
 
-        binding.btnBranchPrev.setOnClickListener { chatVm.switchBranch(-1) }
-        binding.btnBranchNext.setOnClickListener { chatVm.switchBranch(+1) }
-
         binding.btnWebSearch.setOnClickListener { showWebSearchDialog() }
         renderWebSearchButton()
 
@@ -180,16 +180,6 @@ class ChatFragment : Fragment() {
             }
         }
 
-        chatVm.branchNav.observe(viewLifecycleOwner) { st ->
-            binding.btnBranchPrev.isEnabled = st.enabled && st.total > 1
-            binding.btnBranchNext.isEnabled = st.enabled && st.total > 1
-            val alpha = if (st.enabled && st.total > 1) 1.0f else 0.35f
-            binding.btnBranchPrev.alpha = alpha
-            binding.btnBranchNext.alpha = alpha
-            // Encode index/total in contentDescription for accessibility/debug.
-            binding.btnBranchPrev.contentDescription = "上一分支（${st.index}/${st.total}）"
-            binding.btnBranchNext.contentDescription = "下一分支（${st.index}/${st.total}）"
-        }
 
         binding.rvMessages.itemAnimator = null
         binding.rvMessages.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
