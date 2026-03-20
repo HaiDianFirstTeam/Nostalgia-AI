@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="播放列表"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:paddingBottom="8dp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvQueue"
+        android:layout_width="match_parent"
+        android:layout_height="360dp"
+        android:clipToPadding="false" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:alpha="0.6"
+        android:textSize="12sp"
+        android:paddingTop="6dp"
+        android:text="长按拖动可调整顺序" />
+
+</LinearLayout>

@@ -84,6 +84,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/nav_settings" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnToolbox"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/nav_toolbox" />
         </LinearLayout>
 
         <TextView

@@ -2,6 +2,7 @@
     <string name="app_name">Nostalgia-AI</string>
     <string name="nav_new_chat">新对话</string>
     <string name="nav_settings">设置</string>
+    <string name="nav_toolbox">百宝箱</string>
     <string name="nav_history">历史记录</string>
     <string name="action_send">发送</string>
     <string name="action_stop">停止</string>
@@ -35,5 +36,5 @@
       修改位置：改 res/layout/activity_about.xml 里 imgLogo/tvAbout 的
       layout_constraintVertical_bias、图片大小、padding 或 margin。
     -->
-    <string name="about_body">软件由Linlelest开发，支持安卓4.4.2以上。\n\n项目地址：github.com/HaiDianFirstTeam/Nostalgia-Ai\n\n当前版本：0.3.9.3</string>
+    <string name="about_body">软件由Linlelest开发，支持安卓4.4.2以上。\n\n项目地址：github.com/HaiDianFirstTeam/Nostalgia-Ai\n\n当前版本：0.4.0.0</string>
 </resources>

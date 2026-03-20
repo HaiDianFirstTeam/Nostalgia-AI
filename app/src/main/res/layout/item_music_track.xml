@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:alpha="0.7"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/btnPlay"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="播放"
+        app:srcCompat="@android:drawable/ic_media_play"
+        app:tint="?attr/colorControlNormal" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/btnDownload"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="6dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="下载"
+        app:srcCompat="@android:drawable/stat_sys_download"
+        app:tint="?attr/colorControlNormal" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/btnMore"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="6dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="更多"
+        app:srcCompat="@android:drawable/ic_menu_more"
+        app:tint="?attr/colorControlNormal" />
+
+</LinearLayout>

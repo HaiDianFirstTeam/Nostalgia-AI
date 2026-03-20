@@ -57,6 +57,46 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.toolbox.ToolboxActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.translate.TranslateActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.translate.TranslateModelPickerActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicPlayHistoryActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicPlaylistsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicPlaylistDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicSettingsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicPlayerActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.music.MusicLyricsActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>

@@ -132,7 +132,7 @@ def computeVersionName() {
     def tag = System.getenv('GITHUB_REF_NAME')
     if (tag == null || tag.trim().isEmpty()) {
         // Default local version when not building from a tag.
-        return '0.3.9.3'
+        return '0.4.0.0'
     }
     tag = tag.trim()
     if (tag.startsWith('v') || tag.startsWith('V')) {

@@ -14,6 +14,7 @@ import com.haidianfirstteam.nostalgiaai.ui.chat.ChatFragment
 import com.haidianfirstteam.nostalgiaai.ui.drawer.ConversationAdapter
 import com.haidianfirstteam.nostalgiaai.ui.drawer.DrawerViewModel
 import com.haidianfirstteam.nostalgiaai.ui.settings.SettingsActivity
+import com.haidianfirstteam.nostalgiaai.ui.toolbox.ToolboxActivity
 import com.haidianfirstteam.nostalgiaai.util.RoomDebug
 import com.haidianfirstteam.nostalgiaai.util.CrashGuard
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +63,7 @@ class MainActivity : BaseActivity() {
         setupDrawerList()
         binding.btnNewChat.setOnClickListener { drawerVm.newConversation() }
         binding.btnSettings.setOnClickListener { startActivity(android.content.Intent(this, SettingsActivity::class.java)) }
+        binding.btnToolbox.setOnClickListener { startActivity(android.content.Intent(this, ToolboxActivity::class.java)) }
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()

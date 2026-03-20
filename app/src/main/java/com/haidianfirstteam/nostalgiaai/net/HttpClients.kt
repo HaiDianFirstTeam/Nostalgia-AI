@@ -15,6 +15,9 @@ object HttpClients {
     @Volatile
     private var tavilyClient: OkHttpClient? = null
 
+    @Volatile
+    private var musicClient: OkHttpClient? = null
+
     fun openAi(): OkHttpClient {
         return openAiClient ?: synchronized(this) {
             openAiClient ?: LegacyTls.enableTls12OnPreLollipop(
@@ -38,6 +41,19 @@ object HttpClients {
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .build()
                 .also { tavilyClient = it }
+        }
+    }
+
+    fun music(): OkHttpClient {
+        return musicClient ?: synchronized(this) {
+            musicClient ?: LegacyTls.enableTls12OnPreLollipop(
+                OkHttpClient.Builder()
+            )
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build()
+                .also { musicClient = it }
         }
     }
 }

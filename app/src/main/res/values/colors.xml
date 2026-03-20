@@ -14,4 +14,13 @@
 
     <!-- Chip border (avoid theme attrs in drawable for API 19) -->
     <color name="chip_stroke">#DDDDDD</color>
+
+    <!-- Translate history cards -->
+    <color name="translate_card_left">#E3F2FD</color>
+    <color name="translate_card_right">#E8F5E9</color>
+
+    <!-- Lyrics colors -->
+    <color name="lyric_active">#111111</color>
+    <color name="lyric_normal">#444444</color>
+    <color name="lyrics_fade">#CCFFFFFF</color>
 </resources>
