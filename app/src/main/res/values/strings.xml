@@ -11,6 +11,7 @@
     <string name="action_retry">重试</string>
     <string name="action_edit_resend">编辑并重发</string>
     <string name="action_edit">编辑</string>
+    <string name="action_delete">删除</string>
 
     <string name="hint_input">输入内容...</string>
     <string name="label_web">联网</string>
@@ -34,5 +35,5 @@
       修改位置：改 res/layout/activity_about.xml 里 imgLogo/tvAbout 的
       layout_constraintVertical_bias、图片大小、padding 或 margin。
     -->
-    <string name="about_body">软件由Linlelest开发，支持安卓4.4.2以上。\n\n项目地址：github.com/HaiDianFirstTeam/Nostalgia-Ai\n\n当前版本：0.3.8</string>
+    <string name="about_body">软件由Linlelest开发，支持安卓4.4.2以上。\n\n项目地址：github.com/HaiDianFirstTeam/Nostalgia-Ai\n\n当前版本：0.3.9</string>
 </resources>

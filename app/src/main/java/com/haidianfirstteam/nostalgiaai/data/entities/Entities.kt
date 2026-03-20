@@ -7,7 +7,9 @@ data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    // Branching chat: current active leaf message id for this conversation.
+    val activeLeafMessageId: Long? = null
 )
 
 @Entity(
@@ -28,6 +30,9 @@ data class MessageEntity(
     val role: String, // "user" | "assistant" | "system"
     val content: String,
     val createdAt: Long,
+
+    // Parent message id (previous node in the active branch). Null for roots.
+    val parentId: Long? = null,
 
     // Snapshot of settings used when sending / generating
     // targetType: "group" | "direct"

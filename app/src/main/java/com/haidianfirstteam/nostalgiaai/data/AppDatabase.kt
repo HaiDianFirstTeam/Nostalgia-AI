@@ -22,7 +22,7 @@ import com.haidianfirstteam.nostalgiaai.data.entities.*
         TavilyKeyEntity::class,
         AppSettingEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -84,6 +84,50 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                // conversations: add active leaf pointer
+                db.execSQL("ALTER TABLE conversations ADD COLUMN activeLeafMessageId INTEGER")
+                // messages: add parent pointer
+                db.execSQL("ALTER TABLE messages ADD COLUMN parentId INTEGER")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_messages_parentId ON messages(parentId)")
+
+                // Backfill parentId as a simple linear chain by createdAt for existing data,
+                // and set activeLeafMessageId to the last message.
+                val convCursor = db.query("SELECT id FROM conversations")
+                convCursor.use { cc ->
+                    while (cc.moveToNext()) {
+                        val convId = cc.getLong(0)
+                        val msgCursor = db.query(
+                            "SELECT id FROM messages WHERE conversationId=? ORDER BY createdAt ASC, id ASC",
+                            arrayOf(convId.toString())
+                        )
+                        var prev: Long? = null
+                        var last: Long? = null
+                        msgCursor.use { mc ->
+                            while (mc.moveToNext()) {
+                                val id = mc.getLong(0)
+                                if (prev != null) {
+                                    db.execSQL(
+                                        "UPDATE messages SET parentId=? WHERE id=?",
+                                        arrayOf(prev as Any, id as Any)
+                                    )
+                                }
+                                prev = id
+                                last = id
+                            }
+                        }
+                        if (last != null) {
+                            db.execSQL(
+                                "UPDATE conversations SET activeLeafMessageId=? WHERE id=?",
+                                arrayOf(last as Any, convId as Any)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         fun get(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -91,7 +135,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "nostalgia_ai.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

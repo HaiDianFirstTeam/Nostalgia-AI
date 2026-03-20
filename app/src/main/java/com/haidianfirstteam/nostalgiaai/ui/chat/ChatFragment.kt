@@ -74,6 +74,9 @@ class ChatFragment : Fragment() {
             },
             onEditAssistant = { msg, newText ->
                 chatVm.editMessage(msg.id, newText)
+            },
+            onDeletePair = { msg ->
+                chatVm.deleteMessagePair(msg.id)
             }
         )
 
@@ -138,6 +141,9 @@ class ChatFragment : Fragment() {
         }
         binding.btnTarget.setOnClickListener { showTargetPickerDialog() }
 
+        binding.btnBranchPrev.setOnClickListener { chatVm.switchBranch(-1) }
+        binding.btnBranchNext.setOnClickListener { chatVm.switchBranch(+1) }
+
         binding.btnWebSearch.setOnClickListener { showWebSearchDialog() }
         renderWebSearchButton()
 
@@ -174,13 +180,24 @@ class ChatFragment : Fragment() {
             }
         }
 
+        chatVm.branchNav.observe(viewLifecycleOwner) { st ->
+            binding.btnBranchPrev.isEnabled = st.enabled && st.total > 1
+            binding.btnBranchNext.isEnabled = st.enabled && st.total > 1
+            val alpha = if (st.enabled && st.total > 1) 1.0f else 0.35f
+            binding.btnBranchPrev.alpha = alpha
+            binding.btnBranchNext.alpha = alpha
+            // Encode index/total in contentDescription for accessibility/debug.
+            binding.btnBranchPrev.contentDescription = "上一分支（${st.index}/${st.total}）"
+            binding.btnBranchNext.contentDescription = "下一分支（${st.index}/${st.total}）"
+        }
+
         binding.rvMessages.itemAnimator = null
         binding.rvMessages.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
-                val lm = recyclerView.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager ?: return
-                val last = lm.findLastVisibleItemPosition()
-                val total = lm.itemCount
-                stickToBottom = total <= 0 || last >= total - 2
+                // IMPORTANT: For chat, index-based detection is not enough.
+                // When the last item grows during streaming, the last item may still be visible
+                // even if user has scrolled up inside it. Use pixel-based bottom check instead.
+                stickToBottom = !recyclerView.canScrollVertically(1)
             }
         })
 

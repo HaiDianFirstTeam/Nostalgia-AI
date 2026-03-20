@@ -27,6 +27,12 @@ data class RequestState(
     val statusText: String = ""
 )
 
+data class BranchNavState(
+    val enabled: Boolean,
+    val index: Int,
+    val total: Int
+)
+
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val db: AppDatabase = (app as NostalgiaApp).db
@@ -39,6 +45,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _messages = MutableLiveData<List<MessageUi>>(emptyList())
     val messages: LiveData<List<MessageUi>> = _messages
+
+    private val _branchNav = MutableLiveData<BranchNavState>(BranchNavState(false, 1, 1))
+    val branchNav: LiveData<BranchNavState> = _branchNav
 
     private val _requestState = MutableLiveData<RequestState>(RequestState(false, ""))
     val requestState: LiveData<RequestState> = _requestState
@@ -88,12 +97,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // Ensure conversation still exists (it may have been cleaned up unexpectedly)
                 val conv = db.conversations().getById(convId)
                 if (conv == null) throw IllegalStateException("conversation missing")
+                val parentId = conv.activeLeafMessageId
+                val shouldUpdateTitle = parentId == null
                 userMsgId = db.messages().insert(
                     MessageEntity(
                         conversationId = convId,
                         role = "user",
                         content = trimmed,
                         createdAt = now
+                        ,parentId = parentId
                         ,targetType = targetType
                         ,targetGroupId = targetGroupId
                         ,targetProviderId = targetProviderId
@@ -103,6 +115,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 )
                 db.conversations().touch(convId, now)
+                db.conversations().setActiveLeaf(convId, userMsgId)
+
+                // Set conversation title to first user prompt snippet.
+                if (shouldUpdateTitle) {
+                    val existing = db.conversations().getById(convId) ?: return@withContext
+                    db.conversations().update(
+                        existing.copy(
+                            title = makeConversationTitleFromFirstPrompt(trimmed),
+                            updatedAt = now
+                        )
+                    )
+                }
             }
             // Save attachments
             withContext(Dispatchers.IO) {
@@ -110,185 +134,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             refreshMessages(convId)
 
-            // Real pipeline call (stream/compat/off). Keep a reference so UI can cancel.
-            val job = viewModelScope.launch {
-                try {
-                    val userMsg = withContext(Dispatchers.IO) { db.messages().getById(userMsgId) }
-                    if (userMsg != null) {
-                        _requestState.value = RequestState(true, getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.status_calling_model))
-
-                        val (streamMode, compatMs) = withContext(Dispatchers.IO) {
-                            val mode = settingsRepo.getStreamModeBlocking()
-                            val ms = settingsRepo.getCompatStreamIntervalMsBlocking()
-                            Pair(mode, ms)
-                        }
-
-                        if (streamMode == "off") {
-                            val out = try {
-                                val result = pipeline.runOnce(userMsg)
-                                result.getOrElse { e ->
-                                    postErrorDialog("请求失败（非流式）", e)
-                                    com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
-                                        text = "请求失败：${e.message ?: "未知错误"}",
-                                        routedProviderId = null,
-                                        routedApiKeyId = null,
-                                        routedModelId = null
-                                    )
-                                }
-                            } catch (e: Exception) {
-                                postErrorDialog("请求失败（非流式）", e)
-                                com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
-                                    text = "请求失败：${e.message ?: "未知错误"}",
-                                    routedProviderId = null,
-                                    routedApiKeyId = null,
-                                    routedModelId = null
-                                )
-                            }
-
-                            if (!currentCoroutineContext().isActive) return@launch
-
-                            val replyText = out.text
-                            val encoded = if (out.webLinks.isNotEmpty()) {
-                                WebLinksCodec.encode(out.webLinks.map { WebLinkUi(it.title, it.url) }, replyText)
-                            } else replyText
-                            withContext(Dispatchers.IO) {
-                                db.messages().insert(
-                                    MessageEntity(
-                                        conversationId = convId,
-                                        role = "assistant",
-                                        content = encoded,
-                                        createdAt = System.currentTimeMillis(),
-                                        targetType = userMsg.targetType,
-                                        targetGroupId = userMsg.targetGroupId,
-                                        targetProviderId = userMsg.targetProviderId,
-                                        targetModelId = userMsg.targetModelId,
-                                        routedProviderId = out.routedProviderId,
-                                        routedApiKeyId = out.routedApiKeyId,
-                                        routedModelId = out.routedModelId,
-                                        webSearchEnabled = userMsg.webSearchEnabled,
-                                        webSearchCount = userMsg.webSearchCount
-                                    )
-                                )
-                                db.conversations().touch(convId, System.currentTimeMillis())
-                            }
-                            refreshMessages(convId)
-                        } else {
-                            var assistantId: Long = -1
-                            withContext(Dispatchers.IO) {
-                                assistantId = db.messages().insert(
-                                    MessageEntity(
-                                        conversationId = convId,
-                                        role = "assistant",
-                                        content = "",
-                                        createdAt = System.currentTimeMillis(),
-                                        targetType = userMsg.targetType,
-                                        targetGroupId = userMsg.targetGroupId,
-                                        targetProviderId = userMsg.targetProviderId,
-                                        targetModelId = userMsg.targetModelId,
-                                        webSearchEnabled = userMsg.webSearchEnabled,
-                                        webSearchCount = userMsg.webSearchCount
-                                    )
-                                )
-                                db.conversations().touch(convId, System.currentTimeMillis())
-                            }
-                            runningAssistantMessageId = assistantId
-                            refreshMessages(convId)
-
-                            val sb = StringBuilder()
-                            var routedProviderId: Long? = null
-                            var routedApiKeyId: Long? = null
-                            var routedModelId: Long? = null
-                            var webLinks: List<com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.WebLink> = emptyList()
-                            var webLinksUi: List<WebLinkUi> = emptyList()
-
-                            val mode = if (streamMode == "compat") ChatPipeline.StreamMode.COMPAT else ChatPipeline.StreamMode.ON
-                            try {
-                                pipeline.runStream(
-                                    userMessage = userMsg,
-                                    mode = mode,
-                                    compatIntervalMs = compatMs,
-                                    onCallReady = { call ->
-                                        runningCall = call
-                                    },
-                                    onStart = { out0 ->
-                                        routedProviderId = out0.routedProviderId
-                                        routedApiKeyId = out0.routedApiKeyId
-                                        routedModelId = out0.routedModelId
-                                        webLinks = out0.webLinks
-                                        webLinksUi = out0.webLinks.map { WebLinkUi(it.title, it.url) }
-                                        // Show chips immediately during streaming (do not wait for final encode).
-                                        updateAssistantWebLinksPreview(assistantId, webLinksUi)
-                                    },
-                                onDeltaText = onDeltaText@{ delta ->
-                                    sb.append(delta)
-                                    val textNow = sb.toString()
-                                    // IMPORTANT: do NOT re-encode web links header on every delta.
-                                    // That creates large strings repeatedly and can crash low-memory devices.
-                                    // During streaming, update UI in-memory only; persist once onDone/onError.
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastStreamUpdateAt < streamUpdateMinIntervalMs) return@onDeltaText
-                                    lastStreamUpdateAt = now
-
-                                    updateAssistantPreview(assistantId, textNow)
-                                },
-                                    onDone = { _ ->
-                                    viewModelScope.launch(Dispatchers.IO) {
-                                        val msg = db.messages().getById(assistantId) ?: return@launch
-                                        val finalText = sb.toString()
-                                        val encoded = if (webLinksUi.isNotEmpty()) {
-                                            WebLinksCodec.encode(webLinksUi, finalText)
-                                        } else finalText
-                                        db.messages().update(
-                                            msg.copy(
-                                                content = encoded,
-                                                routedProviderId = routedProviderId,
-                                                routedApiKeyId = routedApiKeyId,
-                                                routedModelId = routedModelId
-                                            )
-                                        )
-                                        db.conversations().touch(convId, System.currentTimeMillis())
-                                        withContext(Dispatchers.Main) {
-                                            refreshMessages(convId)
-                                        }
-                                    }
-                                },
-                                onError = { err ->
-                                    // Bubble a copyable error dialog.
-                                    _errorDialog.postValue("请求失败（流式）\n\n$err")
-                                    viewModelScope.launch(Dispatchers.IO) {
-                                        val msg = db.messages().getById(assistantId) ?: return@launch
-                                        if (msg.content.isBlank()) {
-                                            db.messages().update(msg.copy(content = "请求失败：${err}"))
-                                        }
-                                        withContext(Dispatchers.Main) {
-                                            refreshMessages(convId)
-                                        }
-                                    }
-                                }
-                            )
-                            } catch (t: Throwable) {
-                                if (t is CancellationException) throw t
-                                postErrorDialog("请求失败（流式启动）", t)
-                                // Never crash the app on stream setup failure.
-                                withContext(Dispatchers.IO) {
-                                    val msg = db.messages().getById(assistantId) ?: return@withContext
-                                    if (msg.content.isBlank()) {
-                                        val err = if (t is OutOfMemoryError) "内存不足（已自动降级/截断搜索结果）" else (t.message ?: "未知错误")
-                                        db.messages().update(msg.copy(content = "请求失败：${err}"))
-                                    }
-                                }
-                                refreshMessages(convId)
-                            }
-                        }
-                    }
-                } finally {
-                    runningJob = null
-                    runningCall = null
-                    runningAssistantMessageId = null
-                    _requestState.postValue(RequestState(false, ""))
-                }
-            }
-            runningJob = job
+            startAssistantRequest(convId, userMsgId)
             } catch (t: Throwable) {
                 if (t is CancellationException) return@launch
                 postErrorDialog("发送失败", t)
@@ -302,6 +148,188 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // ignore
                 }
             }
+        }
+    }
+
+    private fun startAssistantRequest(conversationId: Long, userMsgId: Long) {
+        // Real pipeline call (stream/compat/off). Keep a reference so UI can cancel.
+        val job = viewModelScope.launch {
+            try {
+                val userMsg = withContext(Dispatchers.IO) { db.messages().getById(userMsgId) }
+                if (userMsg != null) {
+                    _requestState.value = RequestState(true, getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.status_calling_model))
+                    runAssistantForUserMessage(conversationId, userMsg)
+                }
+            } finally {
+                runningJob = null
+                runningCall = null
+                runningAssistantMessageId = null
+                _requestState.postValue(RequestState(false, ""))
+            }
+        }
+        runningJob = job
+    }
+
+    private suspend fun runAssistantForUserMessage(conversationId: Long, userMsg: MessageEntity) {
+        val (streamMode, compatMs) = withContext(Dispatchers.IO) {
+            val mode = settingsRepo.getStreamModeBlocking()
+            val ms = settingsRepo.getCompatStreamIntervalMsBlocking()
+            Pair(mode, ms)
+        }
+
+        if (streamMode == "off") {
+            val out = try {
+                val result = pipeline.runOnce(userMsg)
+                result.getOrElse { e ->
+                    postErrorDialog("请求失败（非流式）", e)
+                    com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
+                        text = "请求失败：${e.message ?: "未知错误"}",
+                        routedProviderId = null,
+                        routedApiKeyId = null,
+                        routedModelId = null
+                    )
+                }
+            } catch (e: Exception) {
+                postErrorDialog("请求失败（非流式）", e)
+                com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
+                    text = "请求失败：${e.message ?: "未知错误"}",
+                    routedProviderId = null,
+                    routedApiKeyId = null,
+                    routedModelId = null
+                )
+            }
+
+            if (!currentCoroutineContext().isActive) return
+
+            val replyText = out.text
+            val encoded = if (out.webLinks.isNotEmpty()) {
+                WebLinksCodec.encode(out.webLinks.map { WebLinkUi(it.title, it.url) }, replyText)
+            } else replyText
+
+            withContext(Dispatchers.IO) {
+                db.messages().insert(
+                    MessageEntity(
+                        conversationId = conversationId,
+                        role = "assistant",
+                        content = encoded,
+                        createdAt = System.currentTimeMillis(),
+                        parentId = userMsg.id,
+                        targetType = userMsg.targetType,
+                        targetGroupId = userMsg.targetGroupId,
+                        targetProviderId = userMsg.targetProviderId,
+                        targetModelId = userMsg.targetModelId,
+                        routedProviderId = out.routedProviderId,
+                        routedApiKeyId = out.routedApiKeyId,
+                        routedModelId = out.routedModelId,
+                        webSearchEnabled = userMsg.webSearchEnabled,
+                        webSearchCount = userMsg.webSearchCount
+                    )
+                ).also { newAssistantId ->
+                    db.conversations().setActiveLeaf(conversationId, newAssistantId)
+                }
+                db.conversations().touch(conversationId, System.currentTimeMillis())
+            }
+            refreshMessages(conversationId)
+            return
+        }
+
+        // streaming / compat
+        var assistantId: Long = -1
+        withContext(Dispatchers.IO) {
+            assistantId = db.messages().insert(
+                MessageEntity(
+                    conversationId = conversationId,
+                    role = "assistant",
+                    content = "",
+                    createdAt = System.currentTimeMillis(),
+                    parentId = userMsg.id,
+                    targetType = userMsg.targetType,
+                    targetGroupId = userMsg.targetGroupId,
+                    targetProviderId = userMsg.targetProviderId,
+                    targetModelId = userMsg.targetModelId,
+                    webSearchEnabled = userMsg.webSearchEnabled,
+                    webSearchCount = userMsg.webSearchCount
+                )
+            )
+            db.conversations().setActiveLeaf(conversationId, assistantId)
+            db.conversations().touch(conversationId, System.currentTimeMillis())
+        }
+        runningAssistantMessageId = assistantId
+        refreshMessages(conversationId)
+
+        val sb = StringBuilder()
+        var routedProviderId: Long? = null
+        var routedApiKeyId: Long? = null
+        var routedModelId: Long? = null
+        var webLinksUi: List<WebLinkUi> = emptyList()
+
+        val mode = if (streamMode == "compat") ChatPipeline.StreamMode.COMPAT else ChatPipeline.StreamMode.ON
+        try {
+            pipeline.runStream(
+                userMessage = userMsg,
+                mode = mode,
+                compatIntervalMs = compatMs,
+                onCallReady = { call ->
+                    runningCall = call
+                },
+                onStart = { out0 ->
+                    routedProviderId = out0.routedProviderId
+                    routedApiKeyId = out0.routedApiKeyId
+                    routedModelId = out0.routedModelId
+                    webLinksUi = out0.webLinks.map { WebLinkUi(it.title, it.url) }
+                    updateAssistantWebLinksPreview(assistantId, webLinksUi)
+                },
+                onDeltaText = onDeltaText@{ delta ->
+                    sb.append(delta)
+                    val textNow = sb.toString()
+                    val now = System.currentTimeMillis()
+                    if (now - lastStreamUpdateAt < streamUpdateMinIntervalMs) return@onDeltaText
+                    lastStreamUpdateAt = now
+                    updateAssistantPreview(assistantId, textNow)
+                },
+                onDone = { _ ->
+                    viewModelScope.launch(Dispatchers.IO) {
+                        val msg = db.messages().getById(assistantId) ?: return@launch
+                        val finalText = sb.toString()
+                        val encoded = if (webLinksUi.isNotEmpty()) WebLinksCodec.encode(webLinksUi, finalText) else finalText
+                        db.messages().update(
+                            msg.copy(
+                                content = encoded,
+                                routedProviderId = routedProviderId,
+                                routedApiKeyId = routedApiKeyId,
+                                routedModelId = routedModelId
+                            )
+                        )
+                        db.conversations().touch(conversationId, System.currentTimeMillis())
+                        withContext(Dispatchers.Main) {
+                            refreshMessages(conversationId)
+                        }
+                    }
+                },
+                onError = { err ->
+                    _errorDialog.postValue("请求失败（流式）\n\n$err")
+                    viewModelScope.launch(Dispatchers.IO) {
+                        val msg = db.messages().getById(assistantId) ?: return@launch
+                        if (msg.content.isBlank()) {
+                            db.messages().update(msg.copy(content = "请求失败：${err}"))
+                        }
+                        withContext(Dispatchers.Main) {
+                            refreshMessages(conversationId)
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            postErrorDialog("请求失败（流式启动）", t)
+            withContext(Dispatchers.IO) {
+                val msg = db.messages().getById(assistantId) ?: return@withContext
+                if (msg.content.isBlank()) {
+                    val err = if (t is OutOfMemoryError) "内存不足（已自动降级/截断搜索结果）" else (t.message ?: "未知错误")
+                    db.messages().update(msg.copy(content = "请求失败：${err}"))
+                }
+            }
+            refreshMessages(conversationId)
         }
     }
 
@@ -349,6 +377,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun makeConversationTitleFromFirstPrompt(prompt: String): String {
+        val t = prompt.trim().replace("\n", " ").replace("\r", " ")
+        if (t.isBlank()) return getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.nav_new_chat)
+        val scale = try {
+            settingsRepo.getFontScaleBlocking()
+        } catch (_: Throwable) {
+            1.0f
+        }
+        val maxChars = (10f / scale).toInt().coerceIn(4, 10)
+        val head = t.take(maxChars)
+        return if (t.length > maxChars) head + "..." else head
+    }
+
     fun cancelRunningRequest() {
         try {
             runningCall?.cancel()
@@ -378,6 +419,127 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         runningCall = null
         runningAssistantMessageId = null
         _requestState.postValue(RequestState(false, ""))
+    }
+
+    fun switchBranch(delta: Int) {
+        val convId = _conversationId.value ?: return
+        viewModelScope.launch {
+            val changed = withContext(Dispatchers.IO) {
+                val conv = db.conversations().getById(convId) ?: return@withContext false
+                val leafId = conv.activeLeafMessageId ?: return@withContext false
+                val nav = computeBranchNavState(convId, leafId)
+                if (!nav.enabled || nav.total <= 1) return@withContext false
+
+                val pivot = navPivot(convId, leafId) ?: return@withContext false
+                val (siblings, currentIdx) = pivot
+                val nextIdxRaw = currentIdx + if (delta >= 0) 1 else -1
+                val nextIdx = ((nextIdxRaw % siblings.size) + siblings.size) % siblings.size
+                val startId = siblings[nextIdx].id
+                val newLeaf = latestLeafFrom(convId, startId)
+                db.conversations().setActiveLeaf(convId, newLeaf)
+                true
+            }
+            if (changed) {
+                refreshMessages(convId)
+            }
+        }
+    }
+
+    fun deleteMessagePair(messageId: Long) {
+        val convId = _conversationId.value ?: return
+        // If deleting the currently streaming assistant, cancel first.
+        if (runningAssistantMessageId == messageId) {
+            cancelRunningRequest()
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                // Delete within the current active branch path.
+                val conv = db.conversations().getById(convId) ?: return@withContext
+                val leafId = conv.activeLeafMessageId
+                val path = if (leafId == null) {
+                    db.messages().listByConversation(convId)
+                } else {
+                    val out = ArrayList<MessageEntity>()
+                    var cur: Long? = leafId
+                    var guard = 0
+                    while (cur != null && guard++ < 5000) {
+                        val m = db.messages().getById(cur) ?: break
+                        if (m.conversationId != convId) break
+                        out.add(m)
+                        cur = m.parentId
+                    }
+                    out.reverse(); out
+                }
+
+                val idx = path.indexOfFirst { it.id == messageId }
+                if (idx < 0) return@withContext
+                val msg = path[idx]
+
+                var userId: Long? = null
+                var assistantId: Long? = null
+                var newLeaf: Long? = null
+
+                if (msg.role == "user") {
+                    userId = msg.id
+                    assistantId = path.getOrNull(idx + 1)?.takeIf { it.role == "assistant" }?.id
+                    newLeaf = msg.parentId
+                } else if (msg.role == "assistant") {
+                    assistantId = msg.id
+                    userId = path.getOrNull(idx - 1)?.takeIf { it.role == "user" }?.id
+                    newLeaf = (userId?.let { db.messages().getById(it)?.parentId })
+                }
+
+                userId?.let { db.messages().deleteById(it) }
+                assistantId?.let { db.messages().deleteById(it) }
+                db.conversations().setActiveLeaf(convId, newLeaf)
+                db.conversations().touch(convId, System.currentTimeMillis())
+            }
+            refreshMessages(convId)
+        }
+    }
+
+    private suspend fun latestLeafFrom(conversationId: Long, startId: Long): Long {
+        var curId = startId
+        var guard = 0
+        while (guard++ < 5000) {
+            val children = db.messages().listChildren(conversationId, curId)
+            if (children.isEmpty()) return curId
+            curId = children.last().id
+        }
+        return curId
+    }
+
+    // Returns siblings list and current index for the nearest pivot.
+    private suspend fun navPivot(conversationId: Long, leafId: Long): Pair<List<MessageEntity>, Int>? {
+        // 1) Walk up from leaf and find first node that has siblings under the same parent.
+        var curId: Long? = leafId
+        var guard = 0
+        while (curId != null && guard++ < 5000) {
+            val cur = db.messages().getById(curId) ?: return null
+            val parentId = cur.parentId
+            if (parentId != null) {
+                val siblings = db.messages().listChildren(conversationId, parentId)
+                if (siblings.size > 1) {
+                    val idx = siblings.indexOfFirst { it.id == cur.id }
+                    if (idx >= 0) return Pair(siblings, idx)
+                }
+            } else {
+                // root: check multiple roots
+                val roots = db.messages().listRoots(conversationId)
+                if (roots.size > 1) {
+                    val idx = roots.indexOfFirst { it.id == cur.id }
+                    if (idx >= 0) return Pair(roots, idx)
+                }
+            }
+            curId = cur.parentId
+        }
+        return null
+    }
+
+    private suspend fun computeBranchNavState(conversationId: Long, leafId: Long): BranchNavState {
+        val pivot = navPivot(conversationId, leafId) ?: return BranchNavState(false, 1, 1)
+        val total = pivot.first.size
+        return if (total <= 1) BranchNavState(false, 1, 1) else BranchNavState(true, pivot.second + 1, total)
     }
 
     // Placeholder for real pipeline:
@@ -427,14 +589,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
 
-            withContext(Dispatchers.IO) {
-                db.messages().update(userMsg.copy(content = newContent))
-                // Delete all messages after this user message
-                db.messages().deleteAfter(convId, userMsg.createdAt)
+            // Create a new user message variant (branch) instead of overwriting/deleting.
+            val newUserId = withContext(Dispatchers.IO) {
+                val now = System.currentTimeMillis()
+                val id = db.messages().insert(
+                    userMsg.copy(
+                        id = 0,
+                        content = newContent,
+                        createdAt = now
+                        // keep parentId to branch from the same point
+                    )
+                )
+                db.conversations().setActiveLeaf(convId, id)
+                db.conversations().touch(convId, now)
+                id
             }
             refreshMessages(convId)
-            runPipelineAndInsertAssistant(convId, messageId)
-            _requestState.postValue(RequestState(false, ""))
+            startAssistantRequest(convId, newUserId)
         }
     }
 
@@ -452,86 +623,54 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
             val userMsgIdToRun: Long? = withContext(Dispatchers.IO) {
                 when (msg.role) {
-                    "assistant" -> {
-                        // delete assistant and anything after it
-                        db.messages().deleteFromTime(convId, msg.createdAt)
-                        // find last user before this assistant
-                        val upTo = db.messages().listUpToTime(convId, msg.createdAt - 1)
-                        upTo.lastOrNull { it.role == "user" }?.id
-                    }
-                    "user" -> {
-                        // delete anything after this user message
-                        db.messages().deleteAfter(convId, msg.createdAt)
-                        msg.id
-                    }
+                    "assistant" -> msg.parentId
+                    "user" -> msg.id
                     else -> null
                 }
             }
 
             refreshMessages(convId)
             if (userMsgIdToRun != null) {
-                runPipelineAndInsertAssistant(convId, userMsgIdToRun)
+                // Retrying creates a new assistant child under the same user message.
+                startAssistantRequest(convId, userMsgIdToRun)
+            } else {
+                _requestState.postValue(RequestState(false, ""))
             }
-            _requestState.postValue(RequestState(false, ""))
         }
-    }
-
-    private suspend fun runPipelineAndInsertAssistant(conversationId: Long, userMessageId: Long) {
-        val userMsg = withContext(Dispatchers.IO) { db.messages().getById(userMessageId) } ?: return
-        val out = try {
-            val result = pipeline.runOnce(userMsg)
-            result.getOrElse { e ->
-                com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
-                    text = "请求失败：${e.message ?: getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.err_unknown)}",
-                    routedProviderId = null,
-                    routedApiKeyId = null,
-                    routedModelId = null
-                )
-            }
-        } catch (e: Exception) {
-            com.haidianfirstteam.nostalgiaai.domain.ChatPipeline.Output(
-                text = "请求失败：${e.message ?: getApplication<Application>().getString(com.haidianfirstteam.nostalgiaai.R.string.err_unknown)}",
-                routedProviderId = null,
-                routedApiKeyId = null,
-                routedModelId = null
-            )
-        }
-
-        val replyEncoded = if (out.webLinks.isNotEmpty()) {
-            WebLinksCodec.encode(
-                out.webLinks.map { WebLinkUi(it.title, it.url) },
-                out.text
-            )
-        } else out.text
-
-        withContext(Dispatchers.IO) {
-            db.messages().insert(
-                MessageEntity(
-                    conversationId = conversationId,
-                    role = "assistant",
-                    content = replyEncoded,
-                    createdAt = System.currentTimeMillis(),
-                    targetType = userMsg.targetType,
-                    targetGroupId = userMsg.targetGroupId,
-                    targetProviderId = userMsg.targetProviderId,
-                    targetModelId = userMsg.targetModelId,
-                    routedProviderId = out.routedProviderId,
-                    routedApiKeyId = out.routedApiKeyId,
-                    routedModelId = out.routedModelId,
-                    webSearchEnabled = userMsg.webSearchEnabled,
-                    webSearchCount = userMsg.webSearchCount
-                )
-            )
-            db.conversations().touch(conversationId, System.currentTimeMillis())
-        }
-        refreshMessages(conversationId)
     }
 
     private suspend fun refreshMessages(conversationId: Long) {
         val list = withContext(Dispatchers.IO) {
-            db.messages().listByConversation(conversationId)
+            val conv = db.conversations().getById(conversationId)
+            val leafId = conv?.activeLeafMessageId
+            if (leafId == null) {
+                db.messages().listByConversation(conversationId)
+            } else {
+                val out = ArrayList<MessageEntity>()
+                var cur: Long? = leafId
+                var guard = 0
+                while (cur != null && guard++ < 5000) {
+                    val m = db.messages().getById(cur) ?: break
+                    if (m.conversationId != conversationId) break
+                    out.add(m)
+                    cur = m.parentId
+                }
+                out.reverse()
+                out
+            }
         }
         _messages.value = list.map { it.toUi() }
+
+        // Update branch navigation state.
+        viewModelScope.launch(Dispatchers.IO) {
+            val conv = db.conversations().getById(conversationId) ?: return@launch
+            val leafId = conv.activeLeafMessageId ?: run {
+                _branchNav.postValue(BranchNavState(false, 1, 1))
+                return@launch
+            }
+            val st = computeBranchNavState(conversationId, leafId)
+            _branchNav.postValue(st)
+        }
     }
 
     private fun MessageEntity.toUi(): MessageUi {

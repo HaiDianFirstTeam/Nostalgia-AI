@@ -24,6 +24,9 @@ interface ConversationDao {
     @Query("UPDATE conversations SET updatedAt=:updatedAt WHERE id=:id")
     suspend fun touch(id: Long, updatedAt: Long)
 
+    @Query("UPDATE conversations SET activeLeafMessageId=:leafId WHERE id=:id")
+    suspend fun setActiveLeaf(id: Long, leafId: Long?)
+
     @Query("DELETE FROM conversations WHERE id=:id")
     suspend fun deleteById(id: Long)
 
@@ -38,6 +41,12 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE conversationId=:conversationId ORDER BY createdAt ASC")
     suspend fun listByConversation(conversationId: Long): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE conversationId=:conversationId AND parentId IS NULL ORDER BY createdAt ASC, id ASC")
+    suspend fun listRoots(conversationId: Long): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE conversationId=:conversationId AND parentId=:parentId ORDER BY createdAt ASC, id ASC")
+    suspend fun listChildren(conversationId: Long, parentId: Long): List<MessageEntity>
 
     @Query("SELECT * FROM messages")
     suspend fun listAll(): List<MessageEntity>

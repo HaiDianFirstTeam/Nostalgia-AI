@@ -20,7 +20,8 @@ class MessageAdapter(
     private val markwon: Markwon,
     private val onEditResendUser: (MessageUi, String) -> Unit,
     private val onRetry: (MessageUi) -> Unit,
-    private val onEditAssistant: (MessageUi, String) -> Unit
+    private val onEditAssistant: (MessageUi, String) -> Unit,
+    private val onDeletePair: (MessageUi) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     init {
@@ -100,6 +101,7 @@ class MessageAdapter(
     inner class VHUser(private val b: ItemMessageUserBinding) : RecyclerView.ViewHolder(b.root) {
         fun bind(item: MessageUi) {
             b.tvContent.text = item.content
+            b.btnDelete.setOnClickListener { onDeletePair(item) }
             b.btnCopy.setOnClickListener { copy(b.root.context, item.content) }
             b.btnRetry.setOnClickListener { onRetry(item) }
             b.btnEditResend.setOnClickListener {
@@ -198,6 +200,7 @@ class MessageAdapter(
                 b.tvContent.visibility = View.VISIBLE
                 markwon.setMarkdown(b.tvContent, item.content)
             }
+            b.btnDelete.setOnClickListener { onDeletePair(item) }
             b.btnCopy.setOnClickListener { copy(b.root.context, item.content) }
             b.btnRetry.setOnClickListener { onRetry(item) }
             b.btnEdit.setOnClickListener {
