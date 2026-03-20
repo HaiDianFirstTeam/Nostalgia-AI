@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.fragment.app.commit
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.navigation.NavigationBarView
 import com.haidianfirstteam.nostalgiaai.R
 import com.haidianfirstteam.nostalgiaai.databinding.ActivityMusicBinding
 import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
@@ -117,7 +117,7 @@ class MusicActivity : BaseActivity() {
         super.onDestroy()
     }
 
-    private val onBottomNav = BottomNavigationView.OnItemSelectedListener { item ->
+    private val onBottomNav = NavigationBarView.OnItemSelectedListener { item ->
         when (item.itemId) {
             R.id.nav_music_home -> {
                 switchTo(MusicHomeFragment.newInstance())

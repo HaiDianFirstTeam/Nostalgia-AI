@@ -123,6 +123,9 @@ interface ApiKeyDao {
     @Query("SELECT * FROM api_keys WHERE providerId=:providerId ORDER BY nickname ASC")
     fun observeByProvider(providerId: Long): LiveData<List<ApiKeyEntity>>
 
+    @Query("SELECT * FROM api_keys WHERE providerId=:providerId ORDER BY nickname ASC")
+    suspend fun listByProvider(providerId: Long): List<ApiKeyEntity>
+
     @Query("SELECT * FROM api_keys WHERE id=:id")
     suspend fun getById(id: Long): ApiKeyEntity?
 

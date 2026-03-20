@@ -225,7 +225,9 @@ class TranslateActivity : BaseActivity() {
         val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(com.haidianfirstteam.nostalgiaai.R.id.rvTranslateHistory)
         val btnClear = view.findViewById<android.view.View>(com.haidianfirstteam.nostalgiaai.R.id.btnClearTranslateHistory)
 
-        val adapter = TranslateHistoryAdapter(
+        // Must be declared before lambdas capture it (avoid forward reference in initializer).
+        lateinit var historyAdapter: TranslateHistoryAdapter
+        historyAdapter = TranslateHistoryAdapter(
             onClick = { item ->
                 currentInput = item.input
                 currentOutput = item.output
@@ -236,16 +238,16 @@ class TranslateActivity : BaseActivity() {
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) { store.deleteHistory(item.id) }
                     val list = withContext(Dispatchers.IO) { store.listHistory() }
-                    adapter.submit(list)
+                    historyAdapter.submit(list)
                 }
             }
         )
         rv.layoutManager = GridLayoutManager(this, 2)
-        rv.adapter = adapter
+        rv.adapter = historyAdapter
 
         lifecycleScope.launch {
             val list = withContext(Dispatchers.IO) { store.listHistory() }
-            adapter.submit(list)
+            historyAdapter.submit(list)
         }
 
         btnClear.setOnClickListener {
@@ -255,7 +257,7 @@ class TranslateActivity : BaseActivity() {
                 .setPositiveButton("清空") { _, _ ->
                     lifecycleScope.launch {
                         withContext(Dispatchers.IO) { store.clearHistory() }
-                        adapter.submit(emptyList())
+                        historyAdapter.submit(emptyList())
                     }
                 }
                 .setNegativeButton("取消", null)
