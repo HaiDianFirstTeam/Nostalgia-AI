@@ -66,6 +66,11 @@ class MusicHomeFragment : Fragment() {
         val app = requireActivity().application as NostalgiaApp
         store = MusicStore(app.db)
 
+        // Needed so we can reliably move focus away from EditText after a search.
+        // Otherwise history mode can stay active and hide results.
+        b.root.isFocusable = true
+        b.root.isFocusableInTouchMode = true
+
         trackAdapter = TrackAdapter(
             onPlay = { t -> playTrack(t) },
             onDownload = { t -> downloadTrack(t) },
@@ -461,6 +466,7 @@ class MusicHomeFragment : Fragment() {
         } catch (_: Throwable) {
             // ignore
         }
+        b.root.isFocusableInTouchMode = true
         b.etSearch.clearFocus()
         b.root.requestFocus()
 

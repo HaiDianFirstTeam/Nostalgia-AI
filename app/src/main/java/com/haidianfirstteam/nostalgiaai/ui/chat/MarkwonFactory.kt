@@ -322,7 +322,7 @@ object MarkwonFactory {
             if (s.indexOf('$') >= 0) {
                 s = inlineDollarLoose.replace(s) { m0 ->
                     val inner = normalizeLatex(m0.groupValues[1].trim())
-                    "\\$${inner}\\$"
+                    "\$${inner}\$"
                 }
             }
 

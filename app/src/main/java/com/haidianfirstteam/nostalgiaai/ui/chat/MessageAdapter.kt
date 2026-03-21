@@ -44,8 +44,8 @@ class MessageAdapter(
 
     private data class StreamingMdState(
         var fullText: String = "",
-        var renderedPrefixLen: Int = 0,
-        var rendered: SpannableStringBuilder = SpannableStringBuilder()
+        var rendered: SpannableStringBuilder = SpannableStringBuilder(),
+        var pending: StringBuilder = StringBuilder()
     )
 
     private val streamingStates = HashMap<Long, StreamingMdState>()
@@ -282,53 +282,53 @@ class MessageAdapter(
             }
 
             // Markdown render (mermaid blocks removed)
-            val contentForMarkdown = parsed.text
-            if (contentForMarkdown.isBlank()) {
+                val contentForMarkdown = parsed.text
+                if (contentForMarkdown.isBlank()) {
                 // Avoid showing an ever-growing empty bubble during streaming
                 b.tvContent.visibility = View.GONE
                 b.tvContent.text = ""
-            } else {
-                b.tvContent.visibility = View.VISIBLE
-                val sid = streamingMessageId
-                if (sid != null && item.id == sid) {
-                    // Streaming bubble: incremental render.
-                    // - Never re-render the already-rendered prefix.
-                    // - Only parse & append new completed line segments.
-                    // - Tail segment (no newline yet) stays plain text.
-                    val st = streamingStates.getOrPut(item.id) { StreamingMdState() }
-                    val prev = st.fullText
-                    val next = contentForMarkdown
-                    if (prev.isNotEmpty() && !next.startsWith(prev)) {
-                        // Non-append update: fall back to reset.
-                        st.fullText = ""
-                        st.renderedPrefixLen = 0
-                        st.rendered = SpannableStringBuilder()
-                    }
-                    st.fullText = next
-
-                    val baseLen = st.renderedPrefixLen.coerceIn(0, next.length)
-                    val delta = next.substring(baseLen)
-                    val cut = delta.lastIndexOf('\n')
-                    if (cut >= 0) {
-                        val segment = delta.substring(0, cut + 1)
-                        // Render only this new segment and append.
-                        val sp = markwon.toMarkdown(segment)
-                        st.rendered.append(sp)
-                        st.renderedPrefixLen = baseLen + segment.length
-                    }
-                    val tail = next.substring(st.renderedPrefixLen.coerceIn(0, next.length))
-                    val combined = SpannableStringBuilder()
-                    combined.append(st.rendered)
-                    combined.append(tail)
-                    b.tvContent.text = combined
-
-                    // During streaming, do not render Mermaid WebViews (too heavy).
-                    b.mermaidContainer.visibility = View.GONE
-                    b.mermaidContainer.removeAllViews()
                 } else {
-                    markwon.setMarkdown(b.tvContent, contentForMarkdown)
+                    b.tvContent.visibility = View.VISIBLE
+                    val sid = streamingMessageId
+                    if (sid != null && item.id == sid) {
+                        // Streaming bubble: true incremental render.
+                        // Render only "safe" completed chunks so we don't break multi-line constructs
+                        // (e.g. \[ ... \], \begin{cases} ... \end{cases}, fenced code blocks).
+                        val st = streamingStates.getOrPut(item.id) { StreamingMdState() }
+                        val prev = st.fullText
+                        val next = contentForMarkdown
+                        if (prev.isNotEmpty() && !next.startsWith(prev)) {
+                            // Non-append update: reset.
+                            st.fullText = ""
+                            st.rendered = SpannableStringBuilder()
+                            st.pending = StringBuilder()
+                        }
+                        val appended = if (next.length >= prev.length) next.substring(prev.length) else next
+                        st.fullText = next
+                        st.pending.append(appended)
+
+                        // Consume as many safe chunks as possible.
+                        while (true) {
+                            val cut = findSafeChunkEnd(st.pending)
+                            if (cut <= 0) break
+                            val chunk = st.pending.substring(0, cut)
+                            val sp = markwon.toMarkdown(chunk)
+                            st.rendered.append(sp)
+                            st.pending.delete(0, cut)
+                        }
+
+                        val combined = SpannableStringBuilder()
+                        combined.append(st.rendered)
+                        combined.append(st.pending.toString())
+                        b.tvContent.text = combined
+
+                        // During streaming, do not render Mermaid WebViews (too heavy).
+                        b.mermaidContainer.visibility = View.GONE
+                        b.mermaidContainer.removeAllViews()
+                    } else {
+                        markwon.setMarkdown(b.tvContent, contentForMarkdown)
+                    }
                 }
-            }
 
             if (item.branchEnabled && item.branchTotal > 1) {
                 b.branchBar.visibility = View.VISIBLE
@@ -454,5 +454,75 @@ class MessageAdapter(
             s.indexOf('\\') >= 0 ||
             s.indexOf('<') >= 0 ||
             s.contains("==")
+    }
+
+    /**
+     * Find a safe cut position (in characters) for incremental markdown rendering.
+     * Returns 0 if no safe boundary.
+     */
+    private fun findSafeChunkEnd(pending: StringBuilder): Int {
+        if (pending.isEmpty()) return 0
+        val text = pending.toString()
+        if (!text.contains('\n')) return 0
+
+        var inFence: String? = null
+        var latexBlock = 0
+        var casesBlock = 0
+        var lastSafe = -1
+
+        var lineStart = 0
+        var i = 0
+        while (i < text.length) {
+            val ch = text[i]
+            if (ch == '\n') {
+                val line = text.substring(lineStart, i + 1)
+                val t = line.trimStart()
+
+                // Fence toggle (``` or ~~~)
+                val marker = when {
+                    t.startsWith("```") -> "```"
+                    t.startsWith("~~~") -> "~~~"
+                    else -> null
+                }
+                if (marker != null) {
+                    if (inFence == null) inFence = marker else if (inFence == marker) inFence = null
+                }
+
+                if (inFence == null) {
+                    // Track \[ ... \] (can start/end in same line)
+                    // Count occurrences to be robust.
+                    latexBlock += countOccurrences(line, "\\[")
+                    latexBlock -= countOccurrences(line, "\\]")
+                    if (latexBlock < 0) latexBlock = 0
+
+                    // Track \begin{cases} ... \end{cases}
+                    casesBlock += countOccurrences(line, "\\begin{cases}")
+                    casesBlock -= countOccurrences(line, "\\end{cases}")
+                    if (casesBlock < 0) casesBlock = 0
+                }
+
+                if (inFence == null && latexBlock == 0 && casesBlock == 0) {
+                    lastSafe = i + 1
+                }
+
+                lineStart = i + 1
+            }
+            i++
+        }
+
+        return if (lastSafe > 0) lastSafe else 0
+    }
+
+    private fun countOccurrences(hay: String, needle: String): Int {
+        if (needle.isEmpty()) return 0
+        var idx = 0
+        var count = 0
+        while (true) {
+            val p = hay.indexOf(needle, idx)
+            if (p < 0) break
+            count++
+            idx = p + needle.length
+        }
+        return count
     }
 }
