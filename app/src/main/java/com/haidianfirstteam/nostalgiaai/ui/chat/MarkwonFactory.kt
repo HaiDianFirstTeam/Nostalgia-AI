@@ -207,8 +207,9 @@ object MarkwonFactory {
         // Avoid clashing with strikethrough (~~text~~) by matching only single tildes.
         val sub = Regex("(?<!~)~([^~\\n]+)~(?!~)")
 
-        // Inline math: convert $...$ -> $$...$$ (only when it looks like a formula)
-        val inlineDollar = Regex("(?<!\\$)\\$(?!\\$)([^\\n$]+)\\$(?!\\$)")
+        // Inline math:
+        // - Prefer keeping $...$ as-is (JLatexMathPlugin supports inlines).
+        // - Normalize some bracket variants below.
         // LaTeX bracket forms: \( ... \) and \[ ... \]
         val latexInlineParen = Regex("\\\\\\((.+?)\\\\\\)")
         val latexDisplayBracket = Regex("\\\\\\[(.+?)\\\\\\]")
@@ -220,6 +221,13 @@ object MarkwonFactory {
             if (t.isEmpty()) return false
             // Heuristics: must include typical math tokens to avoid currency.
             return t.any { it in listOf('^', '_', '=', '+', '-', '*', '/', '{', '}', '\\') }
+        }
+
+        fun normalizeLatex(inner0: String): String {
+            // jlatexmath can be picky; normalize a few common macros for compatibility.
+            return inner0
+                .replace("\\\\dfrac", "\\\\frac")
+                .replace("\\\\tfrac", "\\\\frac")
         }
 
         val out = ArrayList<String>(body.size + 16)
@@ -257,7 +265,7 @@ object MarkwonFactory {
                     }
 
                     if (foundEnd) {
-                        var inner = buf.joinToString("\n").trim()
+                        var inner = normalizeLatex(buf.joinToString("\n").trim())
                         // Tolerate user writing `\2x` as a newline in cases.
                         if (inner.contains("\\begin{cases}") && inner.contains("\\end{cases}")) {
                             inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
@@ -331,33 +339,28 @@ object MarkwonFactory {
                 s = sub.replace(s) { m0 -> "<sub>${m0.groupValues[1]}</sub>" }
             }
 
-            // Inline math
-            if (s.indexOf('$') >= 0) {
-                s = inlineDollar.replace(s) { m0 ->
-                    val inner = m0.groupValues[1]
-                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
-                }
-            }
-
             // LaTeX bracket forms
             if (s.indexOf('\\') >= 0) {
                 s = latexInlineParen.replace(s) { m0 ->
-                    val inner = m0.groupValues[1]
-                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
+                    val inner = normalizeLatex(m0.groupValues[1])
+                    // Inline math should stay inline
+                    if (looksLikeMath(inner)) "\$${inner}\$" else m0.value
                 }
                 s = latexDisplayBracket.replace(s) { m0 ->
-                    val inner = m0.groupValues[1]
-                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
+                    val inner = normalizeLatex(m0.groupValues[1])
+                    // If a display bracket is used inline in the same line, convert to display $$...$$
+                    if (looksLikeMath(inner)) "\$\$${inner}\$\$" else m0.value
                 }
 
                 s = latexUserSquare.replace(s) { m0 ->
-                    var inner = m0.groupValues[1]
+                    var inner = normalizeLatex(m0.groupValues[1])
                     // Tolerate user writing `\2x` for a new line in cases.
                     if (inner.contains("\\begin{cases}") && inner.contains("\\end{cases}")) {
                         // Convert backslash before a digit to a newline marker (\\)
                         inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
                     }
-                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
+                    // For user-friendly [\...] inside a paragraph, prefer inline rendering.
+                    if (looksLikeMath(inner)) "\$${inner}\$" else m0.value
                 }
             }
 

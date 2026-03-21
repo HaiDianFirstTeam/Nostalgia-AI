@@ -35,6 +35,28 @@ class MusicHomeFragment : Fragment() {
     private var api1Source: String = "netease"
     private var searchKind: MusicStore.Api1SearchKind = MusicStore.Api1SearchKind.TRACK
 
+    private enum class UiMode { HISTORY, RESULTS }
+
+    private fun setUiMode(mode: UiMode) {
+        when (mode) {
+            UiMode.HISTORY -> {
+                b.historyPanel.visibility = View.VISIBLE
+                b.rvTracks.visibility = View.GONE
+                try {
+                    b.historyPanel.bringToFront()
+                    b.historyPanel.translationZ = 8f * b.root.resources.displayMetrics.density
+                } catch (_: Throwable) {
+                    // ignore
+                }
+            }
+
+            UiMode.RESULTS -> {
+                b.historyPanel.visibility = View.GONE
+                b.rvTracks.visibility = View.VISIBLE
+            }
+        }
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _b = FragmentMusicHomeBinding.inflate(inflater, container, false)
         return b.root
@@ -104,17 +126,9 @@ class MusicHomeFragment : Fragment() {
 
         b.etSearch.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) refreshHistory()
-            // Show history as an overlay panel. Do NOT hide results list, otherwise it can get
-            // stuck invisible on some devices/UI states.
-            b.historyPanel.visibility = if (hasFocus) View.VISIBLE else View.GONE
-            if (hasFocus) {
-                try {
-                    b.historyPanel.bringToFront()
-                    b.historyPanel.translationZ = 8f * b.root.resources.displayMetrics.density
-                } catch (_: Throwable) {
-                    // ignore
-                }
-            }
+            // Requirement: when tapping search bar -> show history and hide results.
+            // When search executed -> hide history and show results.
+            setUiMode(if (hasFocus) UiMode.HISTORY else UiMode.RESULTS)
         }
         b.etSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
@@ -438,8 +452,7 @@ class MusicHomeFragment : Fragment() {
         if (keyword.isBlank()) return
 
         // Force UI into results mode (do not rely on focus callbacks).
-        b.historyPanel.visibility = View.GONE
-        b.rvTracks.visibility = View.VISIBLE
+        setUiMode(UiMode.RESULTS)
 
         // Hide keyboard & drop focus, otherwise history panel might come back.
         try {
@@ -488,8 +501,7 @@ class MusicHomeFragment : Fragment() {
                 }
 
                 // Make final UI state explicit (some legacy devices have flaky focus callbacks).
-                b.historyPanel.visibility = View.GONE
-                b.rvTracks.visibility = View.VISIBLE
+                setUiMode(UiMode.RESULTS)
                 b.etSearch.clearFocus()
                 b.root.requestFocus()
 

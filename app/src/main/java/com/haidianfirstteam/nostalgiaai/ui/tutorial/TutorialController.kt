@@ -66,6 +66,12 @@ object TutorialController {
         screenKey: String,
         steps: List<TutorialStep>
     ) {
+        // Mark as shown at start.
+        // Rationale: some steps trigger navigation (e.g. opening Settings) or require gestures
+        // (e.g. pull-to-show history). If user leaves mid-tutorial, we still treat the page
+        // tutorial as completed to prevent it from reappearing every time.
+        prefs.markShown(screenKey)
+
         val overlay = SpotlightOverlay(hostDecor.context)
         val activity = (confirmContext as? Activity) ?: (hostDecor.context as? Activity)
 
