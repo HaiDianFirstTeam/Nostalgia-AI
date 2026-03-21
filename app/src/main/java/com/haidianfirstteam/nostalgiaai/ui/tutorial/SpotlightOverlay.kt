@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
+import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -207,7 +208,13 @@ class SpotlightOverlay(context: Context) : android.widget.FrameLayout(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val save = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
+        @Suppress("DEPRECATION")
+        val save = if (Build.VERSION.SDK_INT >= 21) {
+            canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
+        } else {
+            // API 19: only the 6-arg overload exists.
+            canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null, Canvas.ALL_SAVE_FLAG)
+        }
         val baseAlpha = (0xCC * scrimAlphaMul).toInt().coerceIn(0, 255)
         scrimPaint.alpha = baseAlpha
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), scrimPaint)
