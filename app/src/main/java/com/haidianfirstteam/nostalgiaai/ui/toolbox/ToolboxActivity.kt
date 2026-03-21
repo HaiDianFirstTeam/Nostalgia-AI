@@ -10,7 +10,6 @@ import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.ui.common.TwoLineAdapter
 import com.haidianfirstteam.nostalgiaai.ui.common.TwoLineItem
 import com.haidianfirstteam.nostalgiaai.ui.music.MusicActivity
-import com.haidianfirstteam.nostalgiaai.ui.music.MusicLocalImportActivity
 import com.haidianfirstteam.nostalgiaai.ui.translate.TranslateActivity
 
 class ToolboxActivity : BaseActivity() {
@@ -34,7 +33,6 @@ class ToolboxActivity : BaseActivity() {
                 when (item.id) {
                     1L -> startActivity(MusicActivity.newIntent(this))
                     2L -> startActivity(TranslateActivity.newIntent(this))
-                    3L -> startActivity(MusicLocalImportActivity.newIntent(this))
                 }
             },
             onLongClick = { _ -> }
@@ -42,10 +40,12 @@ class ToolboxActivity : BaseActivity() {
         binding.recycler.layoutManager = LinearLayoutManager(this)
         binding.recycler.adapter = adapter
 
+        // No FAB on toolbox.
+        binding.fab.visibility = android.view.View.GONE
+
         adapter.submit(
             listOf(
                 TwoLineItem(1L, "音乐解析", "搜索/播放/下载/歌单"),
-                TwoLineItem(3L, "本地歌曲导入", "导入本地音频文件/文件夹，加入歌单或播放列表"),
                 TwoLineItem(2L, "翻译助手", "附带提示词的快捷翻译（支持记忆模式）")
             )
         )

@@ -62,7 +62,7 @@ class MainActivity : BaseActivity() {
 
         setupDrawerList()
         binding.btnNewChat.setOnClickListener { drawerVm.newConversation() }
-        binding.btnSettings.setOnClickListener { startActivity(android.content.Intent(this, SettingsActivity::class.java)) }
+        binding.btnSettingsTop.setOnClickListener { startActivity(android.content.Intent(this, SettingsActivity::class.java)) }
         binding.btnToolbox.setOnClickListener { startActivity(android.content.Intent(this, ToolboxActivity::class.java)) }
 
         // If user chose "replay tutorial" from Settings, ensure main tutorial shows.
@@ -84,6 +84,20 @@ class MainActivity : BaseActivity() {
         drawerVm.openConversationId.observe(this) { id ->
             openConversation(id)
             binding.drawerLayout.closeDrawer(GravityCompat.START)
+        }
+    }
+
+    fun openDrawerForTutorial() {
+        try {
+            binding.drawerLayout.openDrawer(GravityCompat.START)
+        } catch (_: Throwable) {
+        }
+    }
+
+    fun closeDrawerForTutorial() {
+        try {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+        } catch (_: Throwable) {
         }
     }
 
