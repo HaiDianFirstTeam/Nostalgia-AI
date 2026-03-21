@@ -126,7 +126,7 @@ class MusicPlaylistDetailActivity : BaseActivity() {
             withContext(Dispatchers.IO) {
                 for (t in tracks) {
                     try {
-                        val url = api1.getPlayUrl(source = t.source.ifBlank { "netease" }, trackId = t.id, br = br).url
+                        val url = api1.getPlayUrl(source = "netease", trackId = t.id, br = br).url
                         MusicDownloader.enqueue(this@MusicPlaylistDetailActivity, t, url)
                     } catch (e: Throwable) {
                         errors.add(t.name)

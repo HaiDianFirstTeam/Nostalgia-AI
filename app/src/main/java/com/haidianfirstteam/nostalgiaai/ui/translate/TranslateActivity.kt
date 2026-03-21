@@ -336,9 +336,8 @@ class TranslateActivity : BaseActivity() {
                         mode = settings.mode
                     )
                     convAdapter.append(pending)
-                    if (convAdapter.snapshot().size > 1) {
-                        binding.rvChat.scrollToPosition(convAdapter.snapshot().size - 1)
-                    }
+                    val n = convAdapter.snapshot().size
+                    if (n > 0) binding.rvChat.scrollToPosition(n - 1)
 
                     val ctx = withContext(Dispatchers.IO) {
                         store.getConversation(convId)?.turns ?: emptyList()

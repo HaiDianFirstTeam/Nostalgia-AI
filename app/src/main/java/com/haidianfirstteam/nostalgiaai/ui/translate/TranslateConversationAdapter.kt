@@ -38,15 +38,11 @@ class TranslateConversationAdapter : RecyclerView.Adapter<TranslateConversationA
         return VH(b)
     }
 
-    override fun getItemCount(): Int = turns.size.coerceAtLeast(1)
+    override fun getItemCount(): Int = turns.size
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        if (turns.isEmpty()) {
-            holder.bind("", "")
-        } else {
-            val t = turns[position]
-            holder.bind(t.input, t.output)
-        }
+        val t = turns[position]
+        holder.bind(t.input, t.output)
     }
 
     inner class VH(private val b: ItemTranslateChatBinding) : RecyclerView.ViewHolder(b.root) {

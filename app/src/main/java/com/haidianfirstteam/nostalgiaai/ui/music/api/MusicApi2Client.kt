@@ -25,6 +25,14 @@ class MusicApi2Client(
     private val client = HttpClients.music()
     private val json = MediaType.parse("application/json; charset=utf-8")!!
 
+    // Some deployments change or add mirrors. Try a small fallback list.
+    // (Order matters: baseUrl first to respect current config)
+    private val baseUrlCandidates: List<String> = listOf(
+        baseUrl,
+        // Mirror (seen in the wild)
+        "https://wyapi-1.toubiec.cn",
+    ).map { it.trimEnd('/') }.distinct()
+
     fun search(keyword: String, page: Int): List<MusicTrack> {
         val body = gson.toJson(mapOf("keywords" to keyword, "page" to page))
         val el = postJson("/api/music/search", body)
@@ -160,20 +168,48 @@ class MusicApi2Client(
     }
 
     private fun postJson(path: String, bodyJson: String): JsonElement {
-        val url = baseUrl.trimEnd('/') + path
         val reqBody = RequestBody.create(json, bodyJson)
-        val req = Request.Builder().url(url).post(reqBody).build()
-        client.newCall(req).execute().use { resp ->
-            val bodyRaw = resp.body()?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("HTTP ${resp.code()} ${resp.message()} ${bodyRaw.take(500)}")
-            }
+        var lastErr: Throwable? = null
 
-            // Some deployments may prepend junk or return malformed JSON.
-            // Be tolerant: extract a probable JSON segment, then parse leniently.
-            val body = extractProbableJson(bodyRaw)
-            return parseJsonLenient(body)
+        for (bu in baseUrlCandidates) {
+            val url = bu + path
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .post(reqBody)
+                    .header("Accept", "application/json")
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    val bodyRaw = resp.body()?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        throw IllegalStateException("HTTP ${resp.code()} ${resp.message()} ${bodyRaw.take(500)}")
+                    }
+                    // If we got HTML, this is not an API response (router fallback / WAF / wrong host).
+                    if (looksLikeHtml(bodyRaw)) {
+                        throw IllegalStateException("音源2接口返回了网页(HTML)，不是JSON：$url")
+                    }
+
+                    // Some deployments may prepend junk or return malformed JSON.
+                    // Be tolerant: extract a probable JSON segment, then parse leniently.
+                    val body = extractProbableJson(bodyRaw)
+                    return parseJsonLenient(body)
+                }
+            } catch (t: Throwable) {
+                lastErr = t
+            }
         }
+
+        throw (lastErr ?: IllegalStateException("API2 request failed"))
+    }
+
+    private fun looksLikeHtml(raw: String): Boolean {
+        val s = raw.trimStart()
+        if (s.isEmpty()) return false
+        if (s.startsWith("<")) return true
+        if (s.startsWith("<!DOCTYPE", ignoreCase = true)) return true
+        if (s.contains("<html", ignoreCase = true)) return true
+        if (s.contains("Welcome to Nuxt", ignoreCase = true)) return true
+        return false
     }
 
     private fun extractProbableJson(raw: String): String {
