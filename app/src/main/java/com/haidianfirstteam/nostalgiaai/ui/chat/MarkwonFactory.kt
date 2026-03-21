@@ -17,6 +17,7 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.ImagesPlugin
 import io.noties.markwon.image.network.OkHttpNetworkSchemeHandler
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
 import io.noties.markwon.simple.ext.SimpleExtPlugin
 import io.noties.markwon.syntax.Prism4jThemeDefault
 import io.noties.markwon.syntax.SyntaxHighlightPlugin
@@ -63,6 +64,8 @@ object MarkwonFactory {
                 builder.inlinesEnabled(true)
             })
             .usePlugin(SyntaxHighlightPlugin.create(prism4j, prismTheme))
+            // Autolink: make plain URLs clickable.
+            .usePlugin(LinkifyPlugin.create())
             .usePlugin(HtmlPlugin.create())
             .usePlugin(ImagesPlugin.create { plugin ->
                 // Use OkHttp for http/https image loading.

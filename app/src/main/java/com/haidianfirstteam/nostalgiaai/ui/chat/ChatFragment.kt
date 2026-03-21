@@ -38,6 +38,7 @@ class ChatFragment : Fragment() {
 
     private lateinit var adapter: MessageAdapter
     private var stickToBottom: Boolean = true
+    private var userDragging: Boolean = false
 
     private val REQ_PICK_FILE = 1001
     private val REQ_TAKE_PHOTO = 1002
@@ -83,7 +84,10 @@ class ChatFragment : Fragment() {
             }
         )
 
-        binding.rvMessages.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvMessages.layoutManager = LinearLayoutManager(requireContext()).apply {
+            // Keep chat anchored at the bottom by default.
+            stackFromEnd = true
+        }
         binding.rvMessages.adapter = adapter
 
         binding.btnSend.setOnClickListener {
@@ -173,9 +177,18 @@ class ChatFragment : Fragment() {
         }
 
         chatVm.messages.observe(viewLifecycleOwner) { list ->
+            // If request is in-flight, treat the last assistant bubble as "streaming".
+            val inFlight = chatVm.requestState.value?.inFlight == true
+            val streamingId = if (inFlight) {
+                list.lastOrNull()?.takeIf { it.role != "user" }?.id
+            } else null
+            adapter.setStreamingMessageId(streamingId)
+
             adapter.submit(list)
             binding.tvEmpty.isVisible = list.isEmpty()
-            if (list.isNotEmpty() && stickToBottom) {
+            if (list.isNotEmpty() && stickToBottom && !userDragging) {
+                // Important: scrollToPositionWithOffset(last, 0) will pin the last item to TOP,
+                // which looks like "jump to top" when users are near bottom.
                 binding.rvMessages.scrollToPosition(list.size - 1)
             }
         }
@@ -183,6 +196,9 @@ class ChatFragment : Fragment() {
 
         binding.rvMessages.itemAnimator = null
         binding.rvMessages.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: androidx.recyclerview.widget.RecyclerView, newState: Int) {
+                userDragging = newState == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_DRAGGING
+            }
             override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
                 // IMPORTANT: For chat, index-based detection is not enough.
                 // When the last item grows during streaming, the last item may still be visible

@@ -52,6 +52,14 @@
 		android:textColor="?android:attr/textColorPrimary" />
 
 	<LinearLayout
+		android:id="@+id/mermaidContainer"
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:layout_marginTop="2dp"
+		android:orientation="vertical"
+		android:visibility="gone" />
+
+	<LinearLayout
 		android:id="@+id/branchBar"
 		android:layout_width="wrap_content"
 		android:layout_height="wrap_content"

@@ -138,6 +138,7 @@ dependencies {
     implementation 'io.noties.markwon:ext-latex:4.6.2'
     implementation 'io.noties.markwon:syntax-highlight:4.6.2'
     implementation 'io.noties.markwon:simple-ext:4.6.2'
+    implementation 'io.noties.markwon:linkify:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
     implementation 'io.noties.markwon:image:4.6.2'
     // NOTE: image-okhttp artifact is not available on Maven Central for v4.
@@ -155,6 +156,34 @@ dependencies {
     // Keep a single JetBrains annotations artifact to avoid duplicates.
     implementation 'org.jetbrains:annotations:23.0.0'
 }
+
+// --- Mermaid.js asset (for markdown mermaid rendering) ---
+// We keep mermaid.min.js out of git (large) and download it during build.
+// The downloaded file is bundled into APK as an asset and used by WebView.
+def mermaidVersion = "10.9.1"
+def mermaidUrl = "https://cdn.jsdelivr.net/npm/mermaid@${mermaidVersion}/dist/mermaid.min.js"
+def mermaidAssetOut = file("$projectDir/src/main/assets/mermaid/mermaid.min.js")
+
+tasks.register("downloadMermaid") {
+    outputs.file(mermaidAssetOut)
+    doLast {
+        if (mermaidAssetOut.exists() && mermaidAssetOut.length() > 200_000) {
+            // already downloaded
+            return
+        }
+        mermaidAssetOut.parentFile.mkdirs()
+        println("Downloading mermaid.min.js from: ${mermaidUrl}")
+        new URL(mermaidUrl).withInputStream { ins ->
+            mermaidAssetOut.withOutputStream { out ->
+                out << ins
+            }
+        }
+        println("Saved mermaid.min.js to: ${mermaidAssetOut}")
+    }
+}
+
+// Ensure assets exist before build.
+preBuild.dependsOn(tasks.named("downloadMermaid"))
 
 def computeVersionName() {
     def tag = System.getenv('GITHUB_REF_NAME')

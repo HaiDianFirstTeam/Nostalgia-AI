@@ -16,6 +16,7 @@ import com.haidianfirstteam.nostalgiaai.databinding.ItemMessageAiBinding
 import com.haidianfirstteam.nostalgiaai.databinding.ItemMessageUserBinding
 import io.noties.markwon.Markwon
 
+
 class MessageAdapter(
     private val markwon: Markwon,
     private val onEditResendUser: (MessageUi, String) -> Unit,
@@ -31,28 +32,66 @@ class MessageAdapter(
 
     private val items = ArrayList<MessageUi>()
 
+    // When streaming, rendering markdown on every tiny update can cause heavy relayout/jitter.
+    // We render plain text for the current streaming assistant bubble, and apply markdown after done.
+    private var streamingMessageId: Long? = null
+
+    fun setStreamingMessageId(id: Long?) {
+        streamingMessageId = id
+    }
+
     fun submit(list: List<MessageUi>) {
         // Minimal diff to reduce jitter during streaming.
         // Assumes stable ordering by createdAt/id.
         val old = items.toList()
         items.clear()
         items.addAll(list)
+
         if (old.isEmpty()) {
             notifyDataSetChanged()
             return
         }
+
+        // Fast path: old is a prefix of new (append)
+        run {
+            val min = kotlin.math.min(old.size, items.size)
+            var prefixOk = true
+            for (i in 0 until min) {
+                if (old[i].id != items[i].id) {
+                    prefixOk = false
+                    break
+                }
+            }
+            if (prefixOk) {
+                when {
+                    items.size > old.size -> {
+                        notifyItemRangeInserted(old.size, items.size - old.size)
+                        return
+                    }
+                    items.size < old.size -> {
+                        notifyItemRangeRemoved(items.size, old.size - items.size)
+                        return
+                    }
+                }
+            }
+        }
+
         // If only last item content is changing (streaming), update that item only.
-        if (old.size == items.size) {
+        if (old.size == items.size && items.isNotEmpty()) {
             val lastIdx = items.size - 1
             var samePrefix = true
             for (i in 0 until lastIdx) {
-                if (old[i].id != items[i].id) { samePrefix = false; break }
+                if (old[i].id != items[i].id) {
+                    samePrefix = false
+                    break
+                }
             }
             if (samePrefix && old[lastIdx].id == items[lastIdx].id) {
                 notifyItemChanged(lastIdx)
                 return
             }
         }
+
         notifyDataSetChanged()
     }
 
@@ -202,14 +241,29 @@ class MessageAdapter(
                 b.chipsContainer.removeAllViews()
             }
 
-            // Markdown render
-            if (item.content.isBlank()) {
+            // Mermaid extraction (rendered separately via WebView)
+            val parsed = extractMermaidBlocks(item.content)
+            val mermaids = parsed.diagrams
+            renderMermaids(b, mermaids)
+
+            // Markdown render (mermaid blocks removed)
+            val contentForMarkdown = parsed.text
+            if (contentForMarkdown.isBlank()) {
                 // Avoid showing an ever-growing empty bubble during streaming
                 b.tvContent.visibility = View.GONE
                 b.tvContent.text = ""
             } else {
                 b.tvContent.visibility = View.VISIBLE
-                markwon.setMarkdown(b.tvContent, item.content)
+                val sid = streamingMessageId
+                if (sid != null && item.id == sid) {
+                    // Streaming bubble: use raw text to avoid heavy markdown parsing jitter.
+                    b.tvContent.text = contentForMarkdown
+                    // During streaming, do not render Mermaid WebViews (too heavy).
+                    b.mermaidContainer.visibility = View.GONE
+                    b.mermaidContainer.removeAllViews()
+                } else {
+                    markwon.setMarkdown(b.tvContent, contentForMarkdown)
+                }
             }
 
             if (item.branchEnabled && item.branchTotal > 1) {
@@ -228,6 +282,89 @@ class MessageAdapter(
                 showEditDialog(b.root.context, "编辑", item.content) { newText ->
                     onEditAssistant(item, newText)
                 }
+            }
+        }
+    }
+
+    private data class MermaidParsed(
+        val text: String,
+        val diagrams: List<String>
+    )
+
+    private fun extractMermaidBlocks(markdown: String): MermaidParsed {
+        if (markdown.isBlank()) return MermaidParsed(markdown, emptyList())
+        val lines = markdown.split('\n')
+        val out = ArrayList<String>(lines.size)
+        val diagrams = ArrayList<String>()
+
+        var i = 0
+        while (i < lines.size) {
+            val raw = lines[i]
+            val t = raw.trim()
+            val fence = when {
+                t.startsWith("```") -> "```"
+                t.startsWith("~~~") -> "~~~"
+                else -> null
+            }
+            if (fence != null) {
+                val after = t.removePrefix(fence).trimStart()
+                val lang = after.takeWhile { !it.isWhitespace() }
+                if (lang.equals("mermaid", ignoreCase = true)) {
+                    val sb = StringBuilder()
+                    i++
+                    while (i < lines.size) {
+                        val line = lines[i]
+                        if (line.trimStart().startsWith(fence)) break
+                        if (sb.isNotEmpty()) sb.append('\n')
+                        sb.append(line)
+                        i++
+                    }
+                    diagrams.add(sb.toString().trim())
+
+                    // skip closing fence
+                    while (i < lines.size && !lines[i].trimStart().startsWith(fence)) i++
+                    if (i < lines.size) i++
+
+                    // keep a small separator so surrounding text keeps spacing
+                    out.add("")
+                    continue
+                }
+            }
+
+            out.add(raw)
+            i++
+        }
+
+        return MermaidParsed(out.joinToString("\n").trim(), diagrams)
+    }
+
+    private fun renderMermaids(b: ItemMessageAiBinding, diagrams: List<String>) {
+        if (diagrams.isEmpty()) {
+            b.mermaidContainer.visibility = View.GONE
+            b.mermaidContainer.removeAllViews()
+            return
+        }
+        b.mermaidContainer.visibility = View.VISIBLE
+
+        // Reuse existing MermaidView instances when possible.
+        while (b.mermaidContainer.childCount > diagrams.size) {
+            b.mermaidContainer.removeViewAt(b.mermaidContainer.childCount - 1)
+        }
+        while (b.mermaidContainer.childCount < diagrams.size) {
+            val mv = MermaidView(b.root.context)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.topMargin = (4f * b.root.resources.displayMetrics.density).toInt()
+            mv.layoutParams = lp
+            b.mermaidContainer.addView(mv)
+        }
+
+        for (idx in diagrams.indices) {
+            val v = b.mermaidContainer.getChildAt(idx)
+            if (v is MermaidView) {
+                v.setDiagram(diagrams[idx])
             }
         }
     }

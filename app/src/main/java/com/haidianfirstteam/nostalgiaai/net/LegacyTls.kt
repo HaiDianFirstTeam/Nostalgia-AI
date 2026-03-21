@@ -186,18 +186,18 @@ object LegacyTls {
 
         override fun createSocket(s: java.net.Socket, host: String, port: Int, autoClose: Boolean): java.net.Socket {
             val socket = delegate.createSocket(s, host, port, autoClose)
-            return patch(socket)
+            return patch(socket, host)
         }
 
-        override fun createSocket(host: String, port: Int): java.net.Socket = patch(delegate.createSocket(host, port))
+        override fun createSocket(host: String, port: Int): java.net.Socket = patch(delegate.createSocket(host, port), host)
         override fun createSocket(host: String, port: Int, localHost: java.net.InetAddress, localPort: Int): java.net.Socket =
-            patch(delegate.createSocket(host, port, localHost, localPort))
+            patch(delegate.createSocket(host, port, localHost, localPort), host)
 
-        override fun createSocket(host: java.net.InetAddress, port: Int): java.net.Socket = patch(delegate.createSocket(host, port))
+        override fun createSocket(host: java.net.InetAddress, port: Int): java.net.Socket = patch(delegate.createSocket(host, port), null)
         override fun createSocket(address: java.net.InetAddress, port: Int, localAddress: java.net.InetAddress, localPort: Int): java.net.Socket =
-            patch(delegate.createSocket(address, port, localAddress, localPort))
+            patch(delegate.createSocket(address, port, localAddress, localPort), null)
 
-        private fun patch(socket: java.net.Socket): java.net.Socket {
+        private fun patch(socket: java.net.Socket, hostnameForSni: String?): java.net.Socket {
             if (socket is SSLSocket) {
                 try {
                     val supported = socket.supportedProtocols?.toSet() ?: emptySet()
@@ -209,6 +209,38 @@ object LegacyTls {
                     }
                 } catch (_: Exception) {
                     // ignore
+                }
+
+                // Ensure SNI is set on legacy devices.
+                // Without SNI, some CDNs will return a default certificate, which can fail on API 19
+                // with CertPathValidatorException: Trust anchor for certification path not found.
+                if (!hostnameForSni.isNullOrBlank()) {
+                    try {
+                        if (Conscrypt.isConscrypt(socket)) {
+                            try {
+                                Conscrypt.setUseSessionTickets(socket, true)
+                            } catch (_: Throwable) {
+                                // ignore
+                            }
+                            try {
+                                Conscrypt.setHostname(socket, hostnameForSni)
+                            } catch (_: Throwable) {
+                                // ignore
+                            }
+                        } else {
+                            // Reflection fallback for some platform SSLSocket implementations
+                            // (OpenSSLSocketImpl) that support SNI via setHostname(String).
+                            try {
+                                val m = socket.javaClass.getMethod("setHostname", String::class.java)
+                                m.isAccessible = true
+                                m.invoke(socket, hostnameForSni)
+                            } catch (_: Throwable) {
+                                // ignore
+                            }
+                        }
+                    } catch (_: Throwable) {
+                        // ignore
+                    }
                 }
             }
             return socket
