@@ -3,6 +3,7 @@ package com.haidianfirstteam.nostalgiaai.ui.chat
 import android.content.Context
 import android.graphics.Color
 import android.text.style.BackgroundColorSpan
+import ca.blarg.prism4j.languages.Prism4jGrammarLocator
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonConfiguration
@@ -29,7 +30,8 @@ object MarkwonFactory {
         // exhaust threads/memory on low-end legacy devices.
         val client: OkHttpClient = HttpClients.tavily()
 
-        val prism4j = Prism4j(NostalgiaGrammarLocator())
+        // Use pre-packaged grammars (no annotation processing required)
+        val prism4j = Prism4j(Prism4jGrammarLocator())
         val prismTheme = Prism4jThemeDefault.create()
 
         val latexTextSizePx = 16F * context.resources.displayMetrics.scaledDensity
