@@ -228,6 +228,49 @@ object MarkwonFactory {
             val line = body[i]
             val trimmed = line.trim()
 
+            // Multi-line LaTeX block: \[ ... \]
+            // Common in LLM outputs (\[ on its own line, content spans multiple lines).
+            if (trimmed == "\\[" || trimmed.startsWith("\\[ ") || trimmed.startsWith("\\[\t") || trimmed.contains("\\[")) {
+                // If it's already closed on same line, let the single-line regex handle it below.
+                if (!trimmed.contains("\\]")) {
+                    val buf = ArrayList<String>()
+                    // capture content after \[ on the same line
+                    val startIdx = line.indexOf("\\[")
+                    if (startIdx >= 0) {
+                        val after = line.substring(startIdx + 2)
+                        if (after.isNotBlank()) buf.add(after.trimStart())
+                    }
+
+                    var j = i + 1
+                    var foundEnd = false
+                    while (j < body.size) {
+                        val l2 = body[j]
+                        val endPos = l2.indexOf("\\]")
+                        if (endPos >= 0) {
+                            val before = l2.substring(0, endPos)
+                            if (before.isNotBlank()) buf.add(before)
+                            foundEnd = true
+                            break
+                        }
+                        buf.add(l2)
+                        j++
+                    }
+
+                    if (foundEnd) {
+                        var inner = buf.joinToString("\n").trim()
+                        // Tolerate user writing `\2x` as a newline in cases.
+                        if (inner.contains("\\begin{cases}") && inner.contains("\\end{cases}")) {
+                            inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
+                        }
+                        out.add("$$")
+                        if (inner.isNotBlank()) out.add(inner)
+                        out.add("$$")
+                        i = j + 1
+                        continue
+                    }
+                }
+            }
+
             // TOC marker line
             if (hasTocMarker && trimmed.equals("[TOC]", ignoreCase = true)) {
                 if (headings.isEmpty()) {

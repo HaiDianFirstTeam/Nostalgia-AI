@@ -4,13 +4,20 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.util.AttributeSet
+import android.view.GestureDetector
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatDelegate
+import com.google.android.material.button.MaterialButton
 
 /**
  * Renders a Mermaid diagram inside a WebView.
@@ -28,6 +35,23 @@ class MermaidView @JvmOverloads constructor(
     private val webView: WebView = WebView(context)
     private var lastKey: String? = null
 
+    private var scale: Float = 1.0f
+    private var pageLoaded: Boolean = false
+    private var pendingScaleApply: Boolean = false
+
+    private val tvScale: TextView = TextView(context)
+    private val btnPlus: MaterialButton = MaterialButton(context)
+    private val btnMinus: MaterialButton = MaterialButton(context)
+
+    private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            // Toggle between 100% and +10% (subsequent double-tap shrinks back).
+            scale = if (kotlin.math.abs(scale - 1.0f) < 0.001f) 1.1f else 1.0f
+            applyScaleToWeb()
+            return true
+        }
+    })
+
     init {
         setBackgroundResource(com.haidianfirstteam.nostalgiaai.R.drawable.bg_bubble_ai)
         val pad = (8f * resources.displayMetrics.density).toInt()
@@ -37,7 +61,52 @@ class MermaidView @JvmOverloads constructor(
             webView,
             LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         )
+
+        addView(buildZoomControls())
         initWebView()
+    }
+
+    private fun buildZoomControls(): View {
+        val density = resources.displayMetrics.density
+        val wrap = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        fun styleBtn(b: MaterialButton, text: String) {
+            b.text = text
+            b.minHeight = (28 * density).toInt()
+            b.minimumHeight = (28 * density).toInt()
+            b.setPadding((10 * density).toInt(), 0, (10 * density).toInt(), 0)
+        }
+
+        styleBtn(btnMinus, "-")
+        styleBtn(btnPlus, "+")
+
+        tvScale.textSize = 12f
+        tvScale.alpha = 0.85f
+        tvScale.text = "100%"
+        val lpText = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        lpText.leftMargin = (6 * density).toInt()
+        lpText.rightMargin = (6 * density).toInt()
+        tvScale.layoutParams = lpText
+
+        btnMinus.setOnClickListener {
+            setScale(scale - 0.1f)
+        }
+        btnPlus.setOnClickListener {
+            setScale(scale + 0.1f)
+        }
+
+        wrap.addView(btnMinus)
+        wrap.addView(tvScale)
+        wrap.addView(btnPlus)
+
+        return wrap.apply {
+            layoutParams = LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.END or Gravity.TOP
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -57,16 +126,64 @@ class MermaidView @JvmOverloads constructor(
         s.loadWithOverviewMode = true
         s.useWideViewPort = true
 
-        webView.webViewClient = object : WebViewClient() {}
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                pageLoaded = true
+                if (pendingScaleApply) {
+                    pendingScaleApply = false
+                    applyScaleToWeb()
+                }
+            }
+        }
         webView.webChromeClient = WebChromeClient()
         webView.addJavascriptInterface(Bridge(), "Android")
 
-        // Make it non-interactive to avoid scroll conflicts inside RecyclerView.
-        webView.setOnTouchListener { _, _ -> true }
+        // Interaction rules:
+        // - Always capture double-tap.
+        // - When zoomed (scale != 1), allow WebView scrolling for panning.
+        // - When not zoomed, block to avoid scroll conflicts inside RecyclerView.
+        webView.setOnTouchListener { v, ev ->
+            val consumed = gestureDetector.onTouchEvent(ev)
+            if (consumed) return@setOnTouchListener true
+
+            if (kotlin.math.abs(scale - 1.0f) >= 0.001f) {
+                try {
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+                } catch (_: Throwable) {
+                    // ignore
+                }
+                false
+            } else {
+                true
+            }
+        }
+    }
+
+    private fun setScale(next: Float) {
+        scale = next.coerceIn(0.1f, 5.0f)
+        applyScaleToWeb()
+    }
+
+    private fun applyScaleToWeb() {
+        val percent = (scale * 100).toInt().coerceIn(10, 500)
+        tvScale.text = "${percent}%"
+        if (!pageLoaded) {
+            pendingScaleApply = true
+            return
+        }
+        // Apply scale inside page; use width scaling so WebView can scroll horizontally.
+        val js = "try{ if(window.setMermaidScale){ window.setMermaidScale(${scale} ); } }catch(e){}"
+        try {
+            webView.evaluateJavascript(js, null)
+        } catch (_: Throwable) {
+            // ignore
+        }
     }
 
     fun setDiagram(mermaidCode: String) {
         val night = (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES)
+        // Basic contrast for the scale label.
+        tvScale.setTextColor(if (night) Color.parseColor("#DDDDDD") else Color.parseColor("#555555"))
         val key = (if (night) "dark:" else "light:") + mermaidCode.hashCode().toString()
         if (key == lastKey) return
         lastKey = key
@@ -75,6 +192,11 @@ class MermaidView @JvmOverloads constructor(
         val lp = webView.layoutParams
         lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
         webView.layoutParams = lp
+
+        pageLoaded = false
+        pendingScaleApply = true
+        scale = 1.0f
+        tvScale.text = "100%"
 
         val html = buildHtml(mermaidCode, night)
         // Use assets base URL so <script src="mermaid/mermaid.min.js"> resolves.
@@ -123,6 +245,33 @@ class MermaidView @JvmOverloads constructor(
 
                   var code = "$jsCode";
 
+                  // zoom state
+                  window.__scale = 1.0;
+                  window.setMermaidScale = function(s){
+                    try {
+                      var v = Number(s);
+                      if (!isFinite(v)) return;
+                      if (v < 0.1) v = 0.1;
+                      if (v > 5.0) v = 5.0;
+                      window.__scale = v;
+                      applyScale();
+                    } catch (_e) {}
+                  };
+
+                  function applyScale(){
+                    try {
+                      var wrap = document.getElementById('wrap');
+                      var svg = wrap.querySelector('svg');
+                      if (!svg) { postHeight(); return; }
+                      var pct = (window.__scale * 100).toFixed(0) + '%';
+                      svg.style.width = pct;
+                      svg.style.height = 'auto';
+                      postHeight();
+                    } catch (_e) {
+                      postHeight();
+                    }
+                  }
+
                   function postHeight(){
                     try {
                       var h = document.documentElement.scrollHeight || document.body.scrollHeight || 1;
@@ -140,6 +289,7 @@ class MermaidView @JvmOverloads constructor(
                       p.then(function(res){
                         var svg = res.svg || res;
                         document.getElementById('wrap').innerHTML = svg;
+                        applyScale();
                         postHeight();
                       }).catch(function(err){
                         document.getElementById('wrap').innerHTML = '<div class="err">Mermaid 渲染失败\n' + String(err) + '</div>';
@@ -148,6 +298,7 @@ class MermaidView @JvmOverloads constructor(
                     } else {
                       // Older mermaid: render returns svg string
                       document.getElementById('wrap').innerHTML = String(p);
+                      applyScale();
                       postHeight();
                     }
                   } catch (e) {
@@ -165,7 +316,11 @@ class MermaidView @JvmOverloads constructor(
         @JavascriptInterface
         fun onHeight(heightCssPx: Int) {
             // Convert CSS px to Android px approximately (WebView uses CSS px ~= dp)
-            val px = (heightCssPx * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+            val density = resources.displayMetrics.density
+            val pxRaw = (heightCssPx * density).toInt().coerceAtLeast(1)
+            // When zoomed, keep a bounded viewport so the bubble does not grow unbounded.
+            val maxZoomViewportPx = (320f * density).toInt()
+            val px = if (kotlin.math.abs(scale - 1.0f) < 0.001f) pxRaw else kotlin.math.min(pxRaw, maxZoomViewportPx)
             post {
                 val lp = webView.layoutParams
                 if (lp.height != px) {

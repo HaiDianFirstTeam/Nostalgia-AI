@@ -104,10 +104,17 @@ class MusicHomeFragment : Fragment() {
 
         b.etSearch.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) refreshHistory()
-            // History panel must be above track list; otherwise rvTracks (declared later in XML)
-            // will cover it and make items unclickable.
+            // Show history as an overlay panel. Do NOT hide results list, otherwise it can get
+            // stuck invisible on some devices/UI states.
             b.historyPanel.visibility = if (hasFocus) View.VISIBLE else View.GONE
-            b.rvTracks.visibility = if (hasFocus) View.GONE else View.VISIBLE
+            if (hasFocus) {
+                try {
+                    b.historyPanel.bringToFront()
+                    b.historyPanel.translationZ = 8f * b.root.resources.displayMetrics.density
+                } catch (_: Throwable) {
+                    // ignore
+                }
+            }
         }
         b.etSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
