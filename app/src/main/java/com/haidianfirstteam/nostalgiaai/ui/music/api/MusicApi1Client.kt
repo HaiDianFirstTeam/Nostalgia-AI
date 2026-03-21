@@ -21,9 +21,9 @@ class MusicApi1Client(
         val url = HttpUrl.parse(baseUrl)!!.newBuilder()
             .addQueryParameter("types", "search")
             .addQueryParameter("source", source)
-            // This API is known to behave better with GB18030-encoded keywords.
-            // Using addEncodedQueryParameter prevents HttpUrl from re-encoding our percent-encoded bytes.
-            .addEncodedQueryParameter("name", percentEncodeGbk(keyword))
+            // Use standard query encoding. Some servers might accept legacy encodings,
+            // but forcing GB18030 here can cause mismatched/garbled search results.
+            .addQueryParameter("name", keyword)
             .addQueryParameter("count", count.toString())
             .addQueryParameter("pages", page.toString())
             .build()
@@ -89,26 +89,6 @@ class MusicApi1Client(
         if (bad <= 2) return utf8
         val gb = decode(Charset.forName("GB18030"))
         return if (gb.isNotBlank()) gb else utf8
-    }
-
-    private fun percentEncodeGbk(s: String): String {
-        val cs = Charset.forName("GB18030")
-        val bytes = s.toByteArray(cs)
-        val out = StringBuilder(bytes.size * 3)
-        for (b in bytes) {
-            val v = b.toInt() and 0xFF
-            val c = v.toChar()
-            val unreserved = (c in 'a'..'z') || (c in 'A'..'Z') || (c in '0'..'9') || c == '-' || c == '_' || c == '.' || c == '~'
-            if (unreserved) {
-                out.append(c)
-            } else {
-                out.append('%')
-                val hex = v.toString(16).uppercase()
-                if (hex.length == 1) out.append('0')
-                out.append(hex)
-            }
-        }
-        return out.toString()
     }
 
     fun getPlayUrl(source: String, trackId: String, br: Int): MusicPlayUrl {

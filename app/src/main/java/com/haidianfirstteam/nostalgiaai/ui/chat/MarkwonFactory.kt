@@ -228,11 +228,18 @@ object MarkwonFactory {
             return inner0
                 .replace("\\\\dfrac", "\\\\frac")
                 .replace("\\\\tfrac", "\\\\frac")
+                // Fix common typo from some models: \e (not a real command) used for <=
+                .replace("\\\\e", "\\\\le")
+                // Normalize fullwidth braces often produced in CJK outputs
+                .replace('｛', '{')
+                .replace('｝', '}')
         }
 
         // Normalize $ ... $ (spaces inside delimiters) -> $...$
         // Some renderers/plugins fail when there is leading/trailing whitespace.
         val inlineDollarLoose = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\s+\\$(?!\\$)")
+        val inlineDollarTrimLeft = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\$(?!\\$)")
+        val inlineDollarTrimRight = Regex("(?<!\\$)\\$([^$\\n]+?)\\s+\\$(?!\\$)")
 
         val out = ArrayList<String>(body.size + 16)
         var i = 0
@@ -318,9 +325,23 @@ object MarkwonFactory {
 
             var s = line
 
+            // Normalize common fullwidth punctuation so markdown/math can be recognized.
+            // (e.g. ＄H=10＄)
+            if (s.indexOf('＄') >= 0) {
+                s = s.replace('＄', '$')
+            }
+
             // Inline math: normalize $ ... $ spacing
             if (s.indexOf('$') >= 0) {
                 s = inlineDollarLoose.replace(s) { m0 ->
+                    val inner = normalizeLatex(m0.groupValues[1].trim())
+                    "\$${inner}\$"
+                }
+                s = inlineDollarTrimLeft.replace(s) { m0 ->
+                    val inner = normalizeLatex(m0.groupValues[1].trim())
+                    "\$${inner}\$"
+                }
+                s = inlineDollarTrimRight.replace(s) { m0 ->
                     val inner = normalizeLatex(m0.groupValues[1].trim())
                     "\$${inner}\$"
                 }
@@ -352,6 +373,17 @@ object MarkwonFactory {
                     i = j + 1
                     continue
                 }
+            }
+
+            // One-line raw cases env (sometimes emitted without any math delimiters)
+            if (trimmed.contains("\\begin{cases}") && trimmed.contains("\\end{cases}")) {
+                var inner = normalizeLatex(trimmed)
+                inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
+                out.add("$$")
+                out.add(inner)
+                out.add("$$")
+                i++
+                continue
             }
 
             // Emoji shortcuts
