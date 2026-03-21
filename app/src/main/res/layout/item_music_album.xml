@@ -37,7 +37,7 @@
         android:layout_height="36dp"
         android:background="@android:color/transparent"
         android:contentDescription="查看专辑"
-        app:srcCompat="@android:drawable/arrow_forward"
+        app:srcCompat="@android:drawable/ic_media_next"
         app:tint="?attr/colorControlNormal" />
 
 </LinearLayout>
