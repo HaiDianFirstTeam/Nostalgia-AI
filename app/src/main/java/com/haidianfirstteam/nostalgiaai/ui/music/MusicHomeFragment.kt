@@ -486,9 +486,7 @@ class MusicHomeFragment : Fragment() {
                 b.etSearch.clearFocus()
                 b.root.requestFocus()
 
-                if (tracks.isEmpty()) {
-                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "没有搜索结果（或请求过于频繁被限制）")
-                }
+                // Note: per-mode empty-state toast is handled above.
             } catch (t: Throwable) {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle("搜索失败")
