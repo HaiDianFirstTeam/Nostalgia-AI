@@ -5,10 +5,12 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
 import com.haidianfirstteam.nostalgiaai.net.HttpClients
 import okhttp3.MediaType
 import okhttp3.Request
 import okhttp3.RequestBody
+import java.io.StringReader
 
 /**
  * API2: wyapi-eo.toubiec.cn
@@ -162,12 +164,36 @@ class MusicApi2Client(
         val reqBody = RequestBody.create(json, bodyJson)
         val req = Request.Builder().url(url).post(reqBody).build()
         client.newCall(req).execute().use { resp ->
-            val body = resp.body()?.string().orEmpty()
+            val bodyRaw = resp.body()?.string().orEmpty()
             if (!resp.isSuccessful) {
-                throw IllegalStateException("HTTP ${resp.code()} ${resp.message()} ${body.take(500)}")
+                throw IllegalStateException("HTTP ${resp.code()} ${resp.message()} ${bodyRaw.take(500)}")
             }
-            return JsonParser.parseString(body)
+
+            // Some deployments may prepend junk or return malformed JSON.
+            // Be tolerant: extract a probable JSON segment, then parse leniently.
+            val body = extractProbableJson(bodyRaw)
+            return parseJsonLenient(body)
         }
+    }
+
+    private fun extractProbableJson(raw: String): String {
+        val s = raw.trim()
+        if (s.isEmpty()) return s
+        val objStart = s.indexOf('{')
+        val arrStart = s.indexOf('[')
+        val start = when {
+            objStart < 0 -> arrStart
+            arrStart < 0 -> objStart
+            else -> kotlin.math.min(objStart, arrStart)
+        }
+        if (start <= 0) return s
+        return s.substring(start)
+    }
+
+    private fun parseJsonLenient(body: String): JsonElement {
+        val jr = JsonReader(StringReader(body))
+        jr.isLenient = true
+        return JsonParser.parseReader(jr)
     }
 
     private fun parseArtists(o: JsonObject): List<String> {

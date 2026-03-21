@@ -13,4 +13,5 @@
     <color name="lyric_active">#FFFFFF</color>
     <color name="lyric_normal">#BBBBBB</color>
     <color name="lyrics_fade">#CC000000</color>
+    <color name="lyrics_fade_mid">#66000000</color>
 </resources>

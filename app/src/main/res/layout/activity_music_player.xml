@@ -16,16 +16,51 @@
         android:layout_marginTop="?attr/actionBarSize"
         android:padding="16dp">
 
-        <ImageView
-            android:id="@+id/imgCover"
+        <FrameLayout
+            android:id="@+id/coverContainer"
             android:layout_width="220dp"
             android:layout_height="220dp"
-            android:scaleType="centerCrop"
             android:background="@drawable/bg_music_cover_dot"
-            android:contentDescription="封面"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageView
+                android:id="@+id/imgCover"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="封面" />
+
+            <!-- Inline lyrics mode (toggled by tapping cover) -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvInlineLyrics"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="18dp"
+                android:visibility="gone" />
+
+            <!-- Fade scrims for lyrics mode -->
+            <View
+                android:id="@+id/vInlineFadeTop"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_lyrics_fade_top"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/vInlineFadeBottom"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_lyrics_fade_bottom"
+                android:visibility="gone" />
+
+        </FrameLayout>
 
         <TextView
             android:id="@+id/tvTitle"
@@ -36,7 +71,7 @@
             android:textSize="18sp"
             android:maxLines="1"
             android:ellipsize="end"
-            app:layout_constraintTop_toBottomOf="@+id/imgCover"
+            app:layout_constraintTop_toBottomOf="@+id/coverContainer"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 

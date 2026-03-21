@@ -5,14 +5,20 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.haidianfirstteam.nostalgiaai.databinding.ItemTranslateHistoryCardBinding
 
-class TranslateHistoryAdapter(
-    private val onClick: (TranslateHistoryItem) -> Unit,
-    private val onDelete: (TranslateHistoryItem) -> Unit,
-) : RecyclerView.Adapter<TranslateHistoryAdapter.VH>() {
+data class TranslateConversationCard(
+    val id: Long,
+    val updatedAt: Long,
+    val title: String,
+)
 
-    private val items = ArrayList<TranslateHistoryItem>()
+class TranslateConversationHistoryAdapter(
+    private val onClick: (TranslateConversationCard) -> Unit,
+    private val onDelete: (TranslateConversationCard) -> Unit,
+) : RecyclerView.Adapter<TranslateConversationHistoryAdapter.VH>() {
 
-    fun submit(list: List<TranslateHistoryItem>) {
+    private val items = ArrayList<TranslateConversationCard>()
+
+    fun submit(list: List<TranslateConversationCard>) {
         items.clear()
         items.addAll(list)
         notifyDataSetChanged()
@@ -30,9 +36,8 @@ class TranslateHistoryAdapter(
     }
 
     inner class VH(private val b: ItemTranslateHistoryCardBinding) : RecyclerView.ViewHolder(b.root) {
-        fun bind(pos: Int, item: TranslateHistoryItem) {
-            b.tvTitle.text = makeCardTitle(item.input)
-            // Alternate colors by column.
+        fun bind(pos: Int, item: TranslateConversationCard) {
+            b.tvTitle.text = item.title
             val isLeft = (pos % 2 == 0)
             val color = if (isLeft) {
                 com.haidianfirstteam.nostalgiaai.R.color.translate_card_left
@@ -43,19 +48,5 @@ class TranslateHistoryAdapter(
             b.root.setOnClickListener { onClick(item) }
             b.btnDelete.setOnClickListener { onDelete(item) }
         }
-    }
-
-    private fun makeCardTitle(input: String): String {
-        val t = input.trim().replace("\n", " ")
-        if (t.isBlank()) return "(空)"
-        // Determine by whitespace
-        val parts = t.split(Regex("\\s+")).filter { it.isNotBlank() }
-        val head = if (parts.size <= 1) {
-            t.take(18)
-        } else {
-            // Requirement: show up to first 3 words, then ellipsis.
-            parts.take(3).joinToString(" ").take(24)
-        }
-        return if (head.length < t.length) head + "..." else head
     }
 }

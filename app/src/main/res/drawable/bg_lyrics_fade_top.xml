@@ -2,6 +2,7 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:startColor="@color/lyrics_fade"
+        android:centerColor="@color/lyrics_fade_mid"
         android:endColor="#00000000"
         android:angle="90" />
 </shape>

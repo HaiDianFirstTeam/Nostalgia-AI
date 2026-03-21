@@ -91,7 +91,7 @@ class MusicPlaylistDetailActivity : BaseActivity() {
 
     private fun batchDownload() {
         if (tracks.isEmpty()) return
-        val inputSource = arrayOf("API1", "API2")
+        val inputSource = arrayOf("音源1", "音源2")
         val inputQ1 = arrayOf("128", "192", "320", "740", "999")
         val inputQ2 = arrayOf("standard", "exhigh", "lossless", "hires")
         // Very simple picker chain.

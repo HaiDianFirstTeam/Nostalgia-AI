@@ -75,7 +75,7 @@ class MusicSettingsActivity : BaseActivity() {
     }
 
     private fun pickDownloadSource(cur: MusicSettings) {
-        val items = arrayOf("API1", "API2")
+        val items = arrayOf("音源1", "音源2")
         MaterialAlertDialogBuilder(this)
             .setTitle("默认下载音源")
             .setItems(items) { _, which ->

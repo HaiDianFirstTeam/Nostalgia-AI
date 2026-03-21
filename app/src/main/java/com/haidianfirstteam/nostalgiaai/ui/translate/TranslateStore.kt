@@ -36,6 +36,13 @@ data class TranslateHistoryItem(
     val mode: TranslateMode,
 )
 
+data class TranslateConversation(
+    val id: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val turns: List<TranslateHistoryItem>,
+)
+
 class TranslateStore(
     private val db: AppDatabase,
     private val gson: Gson = Gson(),
@@ -43,7 +50,11 @@ class TranslateStore(
     private companion object {
         private const val KEY_SETTINGS = "translate_settings"
         private const val KEY_HISTORY = "translate_history"
+        private const val KEY_CONVERSATIONS = "translate_conversations_v1"
+        private const val KEY_ACTIVE_CONVERSATION_ID = "translate_active_conversation_id"
         private const val MAX_HISTORY = 200
+        private const val MAX_CONVERSATIONS = 30
+        private const val MAX_TURNS_PER_CONV = 60
     }
 
     suspend fun getSettings(): TranslateSettings {
@@ -86,5 +97,98 @@ class TranslateStore(
 
     suspend fun clearHistory() {
         db.appSettings().put(AppSettingEntity(KEY_HISTORY, gson.toJson(emptyList<TranslateHistoryItem>())))
+    }
+
+    suspend fun getActiveConversationId(): Long? {
+        val raw = db.appSettings().get(KEY_ACTIVE_CONVERSATION_ID)?.value?.trim()
+        return raw?.toLongOrNull()
+    }
+
+    suspend fun setActiveConversationId(id: Long?) {
+        db.appSettings().put(AppSettingEntity(KEY_ACTIVE_CONVERSATION_ID, id?.toString().orEmpty()))
+    }
+
+    suspend fun listConversations(): List<TranslateConversation> {
+        val raw = db.appSettings().get(KEY_CONVERSATIONS)?.value ?: return emptyList()
+        return try {
+            val t = object : TypeToken<List<TranslateConversation>>() {}.type
+            val list: List<TranslateConversation> = gson.fromJson(raw, t) ?: emptyList()
+            list.sortedByDescending { it.updatedAt }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    private suspend fun putConversations(list: List<TranslateConversation>) {
+        db.appSettings().put(AppSettingEntity(KEY_CONVERSATIONS, gson.toJson(list)))
+    }
+
+    suspend fun ensureActiveConversationId(): Long {
+        val cur = getActiveConversationId()
+        if (cur != null) {
+            val exists = listConversations().any { it.id == cur }
+            if (exists) return cur
+        }
+        return newConversation()
+    }
+
+    suspend fun newConversation(): Long {
+        val now = System.currentTimeMillis()
+        val id = now
+        val conv = TranslateConversation(id = id, createdAt = now, updatedAt = now, turns = emptyList())
+        val old = listConversations().toMutableList()
+        old.removeAll { it.id == id }
+        old.add(0, conv)
+        val next = old.sortedByDescending { it.updatedAt }.take(MAX_CONVERSATIONS)
+        putConversations(next)
+        setActiveConversationId(id)
+        return id
+    }
+
+    suspend fun getConversation(id: Long): TranslateConversation? {
+        return listConversations().firstOrNull { it.id == id }
+    }
+
+    suspend fun getActiveConversation(): TranslateConversation? {
+        val id = getActiveConversationId() ?: return null
+        return getConversation(id)
+    }
+
+    suspend fun listActiveTurns(): List<TranslateHistoryItem> {
+        val id = ensureActiveConversationId()
+        return getConversation(id)?.turns ?: emptyList()
+    }
+
+    suspend fun appendTurnToActiveConversation(item: TranslateHistoryItem) {
+        val id = ensureActiveConversationId()
+        appendTurnToConversation(id, item)
+    }
+
+    suspend fun appendTurnToConversation(conversationId: Long, item: TranslateHistoryItem) {
+        val now = System.currentTimeMillis()
+        val all = listConversations().toMutableList()
+        val idx = all.indexOfFirst { it.id == conversationId }
+        val existing = if (idx >= 0) all[idx] else TranslateConversation(conversationId, now, now, emptyList())
+        val turns = existing.turns.toMutableList()
+        turns.add(item)
+        val nextTurns = turns.takeLast(MAX_TURNS_PER_CONV)
+        val updated = existing.copy(updatedAt = now, turns = nextTurns)
+        if (idx >= 0) all[idx] = updated else all.add(0, updated)
+        val next = all.sortedByDescending { it.updatedAt }.take(MAX_CONVERSATIONS)
+        putConversations(next)
+        setActiveConversationId(conversationId)
+    }
+
+    suspend fun deleteConversation(conversationId: Long) {
+        val next = listConversations().filterNot { it.id == conversationId }
+        putConversations(next)
+        if (getActiveConversationId() == conversationId) {
+            setActiveConversationId(next.firstOrNull()?.id)
+        }
+    }
+
+    suspend fun clearConversations() {
+        putConversations(emptyList())
+        setActiveConversationId(null)
     }
 }

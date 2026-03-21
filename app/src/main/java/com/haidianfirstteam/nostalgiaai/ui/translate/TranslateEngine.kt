@@ -25,7 +25,8 @@ class TranslateEngine(private val db: AppDatabase) {
 
         // Memory enabled: include a small sliding window of previous translations.
         if (settings.memoryEnabled) {
-            val ctx = history.take(6).reversed()
+            // History ordering may vary (UI list vs store list). Sort by createdAt to be stable.
+            val ctx = history.sortedBy { it.createdAt }.takeLast(6)
             for (h in ctx) {
                 messages.add(OpenAiMessage("user", h.input))
                 messages.add(OpenAiMessage("assistant", h.output))

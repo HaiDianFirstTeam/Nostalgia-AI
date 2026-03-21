@@ -5,10 +5,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.VelocityTracker
+import android.app.Dialog
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.databinding.ActivityTranslateBinding
@@ -25,6 +28,10 @@ class TranslateActivity : BaseActivity() {
     private var settings: TranslateSettings = TranslateSettings()
     private var currentInput: String = ""
     private var currentOutput: String = ""
+
+    private lateinit var singleAdapter: TranslateChatAdapter
+    private lateinit var convAdapter: TranslateConversationAdapter
+    private var activeConversationId: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,29 +63,18 @@ class TranslateActivity : BaseActivity() {
 
         binding.btnSend.setOnClickListener { send() }
 
-        // Pull-down gesture: when at top and user drags down, show history.
+        // Pull-down gesture: a fast downward swipe at the top opens history drawer.
         binding.rvChat.layoutManager = LinearLayoutManager(this)
-        val chatAdapter = TranslateChatAdapter()
-        binding.rvChat.adapter = chatAdapter
-        chatAdapter.submit(currentInput, currentOutput)
-        binding.rvChat.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
-            private var pull = 0
-            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
-                if (!recyclerView.canScrollVertically(-1) && dy < 0) {
-                    pull += -dy
-                    if (pull > 120) {
-                        pull = 0
-                        showHistorySheet()
-                    }
-                } else if (dy > 0) {
-                    pull = 0
-                }
-            }
-        })
+        singleAdapter = TranslateChatAdapter()
+        convAdapter = TranslateConversationAdapter()
+        binding.rvChat.adapter = singleAdapter
+        singleAdapter.submit(currentInput, currentOutput)
+        installPullDownToHistoryGesture()
 
         lifecycleScope.launch {
             settings = withContext(Dispatchers.IO) { store.getSettings() }
             renderHeader()
+            applyMemoryModeUi()
         }
     }
 
@@ -88,6 +84,7 @@ class TranslateActivity : BaseActivity() {
         lifecycleScope.launch {
             settings = withContext(Dispatchers.IO) { store.getSettings() }
             renderHeader()
+            applyMemoryModeUi()
         }
     }
 
@@ -105,6 +102,64 @@ class TranslateActivity : BaseActivity() {
             "direct" -> "模型：直连(${settings.routeModelId ?: "?"})"
             else -> "模型：自动"
         }
+
+        // Toolbar menu: new conversation (only for memory mode)
+        try {
+            if (binding.toolbar.menu.size() == 0) {
+                binding.toolbar.inflateMenu(com.haidianfirstteam.nostalgiaai.R.menu.menu_translate)
+                binding.toolbar.setOnMenuItemClickListener { item ->
+                    if (item.itemId == com.haidianfirstteam.nostalgiaai.R.id.action_new_conversation) {
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.IO) { store.newConversation() }
+                            applyMemoryModeUi()
+                        }
+                        true
+                    } else false
+                }
+            }
+            binding.toolbar.menu.findItem(com.haidianfirstteam.nostalgiaai.R.id.action_new_conversation)?.isVisible = settings.memoryEnabled
+        } catch (_: Throwable) {
+        }
+    }
+
+    private suspend fun loadActiveConversationIfNeeded() {
+        if (!settings.memoryEnabled) return
+        val id = withContext(Dispatchers.IO) { store.ensureActiveConversationId() }
+        activeConversationId = id
+        var turns = withContext(Dispatchers.IO) { store.getConversation(id)?.turns ?: emptyList() }
+
+        // If user turns on memory mode after doing a single translation, keep that as the first turn.
+        if (turns.isEmpty() && currentInput.isNotBlank() && currentOutput.isNotBlank()) {
+            val now = System.currentTimeMillis()
+            val first = TranslateHistoryItem(
+                id = now,
+                createdAt = now,
+                input = currentInput,
+                output = currentOutput,
+                langA = settings.langA,
+                langB = settings.langB,
+                mode = settings.mode
+            )
+            withContext(Dispatchers.IO) { store.appendTurnToConversation(id, first) }
+            turns = listOf(first)
+        }
+
+        convAdapter.submit(turns)
+        if (turns.isNotEmpty()) binding.rvChat.scrollToPosition(turns.size - 1)
+    }
+
+    private fun applyMemoryModeUi() {
+        lifecycleScope.launch {
+            if (settings.memoryEnabled) {
+                binding.rvChat.adapter = convAdapter
+                loadActiveConversationIfNeeded()
+            } else {
+                binding.rvChat.adapter = singleAdapter
+                singleAdapter.submit(currentInput, currentOutput)
+            }
+            // Ensure menu visibility is correct.
+            renderHeader()
+        }
     }
 
     private fun persistSettings() {
@@ -114,17 +169,52 @@ class TranslateActivity : BaseActivity() {
     }
 
     private fun pickLanguage(isA: Boolean) {
-        val langs = arrayOf("auto", "Chinese", "English", "Japanese", "Korean", "French", "German", "Spanish", "Russian")
-        val labels = arrayOf("自动检测", "中文", "英语", "日语", "韩语", "法语", "德语", "西班牙语", "俄语")
+        val langs = arrayOf(
+            "auto",
+            "Chinese",
+            "English",
+            "Japanese",
+            "Korean",
+            "French",
+            "German",
+            "Spanish",
+            "Russian",
+            "__custom__"
+        )
+        val labels = arrayOf("自动检测", "中文", "英语", "日语", "韩语", "法语", "德语", "西班牙语", "俄语", "自定义...")
         val cur = if (isA) settings.langA else settings.langB
-        val checked = langs.indexOf(cur).coerceAtLeast(0)
+        val checked = langs.indexOf(cur).takeIf { it >= 0 } ?: 0
         MaterialAlertDialogBuilder(this)
             .setTitle(if (isA) "选择语言A" else "选择语言B")
             .setSingleChoiceItems(labels, checked) { d, which ->
-                settings = if (isA) settings.copy(langA = langs[which]) else settings.copy(langB = langs[which])
-                persistSettings()
-                renderHeader()
-                d.dismiss()
+                if (langs[which] == "__custom__") {
+                    d.dismiss()
+                    showCustomLanguageDialog(isA)
+                } else {
+                    settings = if (isA) settings.copy(langA = langs[which]) else settings.copy(langB = langs[which])
+                    persistSettings()
+                    renderHeader()
+                    d.dismiss()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showCustomLanguageDialog(isA: Boolean) {
+        val input = android.widget.EditText(this)
+        input.hint = "例如：粤语 / 文言文 / 简体中文 / English-UK"
+        input.setText(if (isA) settings.langA else settings.langB)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(if (isA) "自定义语言A" else "自定义语言B")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val v = input.text?.toString().orEmpty().trim()
+                if (v.isNotBlank()) {
+                    settings = if (isA) settings.copy(langA = v) else settings.copy(langB = v)
+                    persistSettings()
+                    renderHeader()
+                }
             }
             .setNegativeButton("取消", null)
             .show()
@@ -132,10 +222,10 @@ class TranslateActivity : BaseActivity() {
 
     private fun showSettingsDialog() {
         val items = arrayOf(
-            "模式：单词/词组",
-            "模式：句子",
-            "模式：文章",
-            if (settings.memoryEnabled) "记忆：开" else "记忆：关",
+            (if (settings.mode == TranslateMode.WORD) "✓ " else "") + "模式：单词/词组",
+            (if (settings.mode == TranslateMode.SENTENCE) "✓ " else "") + "模式：句子",
+            (if (settings.mode == TranslateMode.ARTICLE) "✓ " else "") + "模式：文章",
+            (if (settings.memoryEnabled) "✓ " else "") + (if (settings.memoryEnabled) "记忆：开" else "记忆：关"),
             "身份设定",
             "选择模型"
         )
@@ -152,10 +242,54 @@ class TranslateActivity : BaseActivity() {
                 }
                 persistSettings()
                 renderHeader()
+                applyMemoryModeUi()
             }
             .setNegativeButton("关闭", null)
             .show()
     }
+
+    private fun installPullDownToHistoryGesture() {
+        val rv = binding.rvChat
+        var vt: VelocityTracker? = null
+        var downY = 0f
+        var armed = false
+        var triggered = false
+
+        rv.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    vt?.recycle()
+                    vt = VelocityTracker.obtain()
+                    vt?.addMovement(ev)
+                    downY = ev.y
+                    armed = !rv.canScrollVertically(-1)
+                    triggered = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    vt?.addMovement(ev)
+                    if (armed && !triggered) {
+                        val dy = ev.y - downY
+                        if (dy > dp(80)) {
+                            vt?.computeCurrentVelocity(1000)
+                            val vy = vt?.yVelocity ?: 0f
+                            // "用力"：要求一定的下拉距离 + 速度
+                            if (vy > 1200f) {
+                                triggered = true
+                                showHistorySheet()
+                            }
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    vt?.recycle()
+                    vt = null
+                }
+            }
+            false
+        }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun showIdentityDialog() {
         val input = android.widget.EditText(this)
@@ -177,33 +311,70 @@ class TranslateActivity : BaseActivity() {
         if (text.isBlank()) return
         binding.etInput.setText("")
 
-        // Default: hide previous conversation (only show current pair)
-        currentInput = text
-        currentOutput = ""
-        (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
+        if (!settings.memoryEnabled) {
+            // No memory: only show current pair.
+            currentInput = text
+            currentOutput = ""
+            (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
+        }
 
         lifecycleScope.launch {
             binding.progress.visibility = View.VISIBLE
             try {
-                val history = withContext(Dispatchers.IO) { store.listHistory() }
-                val output = withContext(Dispatchers.IO) {
-                    engine.translate(settings, text, history)
-                }
-                currentOutput = output
-                (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
+                if (settings.memoryEnabled) {
+                    val convId = withContext(Dispatchers.IO) { store.ensureActiveConversationId() }
+                    activeConversationId = convId
 
-                withContext(Dispatchers.IO) {
-                    store.addHistory(
-                        TranslateHistoryItem(
-                            id = System.currentTimeMillis(),
-                            createdAt = System.currentTimeMillis(),
-                            input = text,
-                            output = output,
-                            langA = settings.langA,
-                            langB = settings.langB,
-                            mode = settings.mode
-                        )
+                    val pendingId = System.currentTimeMillis()
+                    val pending = TranslateHistoryItem(
+                        id = pendingId,
+                        createdAt = pendingId,
+                        input = text,
+                        output = "",
+                        langA = settings.langA,
+                        langB = settings.langB,
+                        mode = settings.mode
                     )
+                    convAdapter.append(pending)
+                    if (convAdapter.snapshot().size > 1) {
+                        binding.rvChat.scrollToPosition(convAdapter.snapshot().size - 1)
+                    }
+
+                    val ctx = withContext(Dispatchers.IO) {
+                        store.getConversation(convId)?.turns ?: emptyList()
+                    }
+                    val output = withContext(Dispatchers.IO) {
+                        engine.translate(settings, text, ctx)
+                    }
+                    convAdapter.updateOutput(pendingId, output)
+
+                    val finalItem = pending.copy(output = output)
+                    withContext(Dispatchers.IO) {
+                        // Save to conversation (for context) + global history (for card wall).
+                        store.appendTurnToConversation(convId, finalItem)
+                        store.addHistory(finalItem.copy(id = finalItem.id))
+                    }
+                } else {
+                    val history = withContext(Dispatchers.IO) { store.listHistory() }
+                    val output = withContext(Dispatchers.IO) {
+                        engine.translate(settings, text, history)
+                    }
+                    currentOutput = output
+                    (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
+
+                    withContext(Dispatchers.IO) {
+                        store.addHistory(
+                            TranslateHistoryItem(
+                                id = System.currentTimeMillis(),
+                                createdAt = System.currentTimeMillis(),
+                                input = text,
+                                output = output,
+                                langA = settings.langA,
+                                langB = settings.langB,
+                                mode = settings.mode
+                            )
+                        )
+                    }
                 }
             } catch (t: Throwable) {
                 MaterialAlertDialogBuilder(this@TranslateActivity)
@@ -218,53 +389,115 @@ class TranslateActivity : BaseActivity() {
     }
 
     private fun showHistorySheet() {
-        val dialog = BottomSheetDialog(this)
+        val dialog = Dialog(this, com.haidianfirstteam.nostalgiaai.R.style.TopSheetDialog)
         val view = LayoutInflater.from(this).inflate(com.haidianfirstteam.nostalgiaai.R.layout.sheet_translate_history, null, false)
         dialog.setContentView(view)
 
+        dialog.window?.let { w ->
+            w.setGravity(Gravity.TOP)
+            w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+
+        val tvTitle = view.findViewById<android.widget.TextView>(com.haidianfirstteam.nostalgiaai.R.id.tvTranslateHistoryTitle)
         val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(com.haidianfirstteam.nostalgiaai.R.id.rvTranslateHistory)
         val btnClear = view.findViewById<android.view.View>(com.haidianfirstteam.nostalgiaai.R.id.btnClearTranslateHistory)
 
-        // Must be declared before lambdas capture it (avoid forward reference in initializer).
-        lateinit var historyAdapter: TranslateHistoryAdapter
-        historyAdapter = TranslateHistoryAdapter(
-            onClick = { item ->
-                currentInput = item.input
-                currentOutput = item.output
-                (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
-                dialog.dismiss()
-            },
-            onDelete = { item ->
-                lifecycleScope.launch {
-                    withContext(Dispatchers.IO) { store.deleteHistory(item.id) }
-                    val list = withContext(Dispatchers.IO) { store.listHistory() }
-                    historyAdapter.submit(list)
-                }
-            }
-        )
-        rv.layoutManager = GridLayoutManager(this, 2)
-        rv.adapter = historyAdapter
-
-        lifecycleScope.launch {
-            val list = withContext(Dispatchers.IO) { store.listHistory() }
-            historyAdapter.submit(list)
-        }
-
-        btnClear.setOnClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("清空历史")
-                .setMessage("确定清空全部翻译历史吗？")
-                .setPositiveButton("清空") { _, _ ->
+        if (settings.memoryEnabled) {
+            tvTitle.text = "对话"
+            lateinit var convListAdapter: TranslateConversationHistoryAdapter
+            convListAdapter = TranslateConversationHistoryAdapter(
+                onClick = { card ->
                     lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { store.clearHistory() }
-                        historyAdapter.submit(emptyList())
+                        withContext(Dispatchers.IO) { store.setActiveConversationId(card.id) }
+                        applyMemoryModeUi()
+                        dialog.dismiss()
+                    }
+                },
+                onDelete = { card ->
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) { store.deleteConversation(card.id) }
+                        val list = withContext(Dispatchers.IO) { store.listConversations() }
+                        convListAdapter.submit(list.map { it.toCard() })
                     }
                 }
-                .setNegativeButton("取消", null)
-                .show()
+            )
+            rv.layoutManager = GridLayoutManager(this, 2)
+            rv.adapter = convListAdapter
+
+            lifecycleScope.launch {
+                val list = withContext(Dispatchers.IO) { store.listConversations() }
+                convListAdapter.submit(list.map { it.toCard() })
+            }
+
+            btnClear.setOnClickListener {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("清空对话")
+                    .setMessage("确定清空全部翻译对话吗？")
+                    .setPositiveButton("清空") { _, _ ->
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.IO) { store.clearConversations() }
+                            withContext(Dispatchers.IO) { store.newConversation() }
+                            applyMemoryModeUi()
+                            dialog.dismiss()
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+        } else {
+            tvTitle.text = "历史记录"
+            // Must be declared before lambdas capture it (avoid forward reference in initializer).
+            lateinit var historyAdapter: TranslateHistoryAdapter
+            historyAdapter = TranslateHistoryAdapter(
+                onClick = { item ->
+                    currentInput = item.input
+                    currentOutput = item.output
+                    (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
+                    dialog.dismiss()
+                },
+                onDelete = { item ->
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) { store.deleteHistory(item.id) }
+                        val list = withContext(Dispatchers.IO) { store.listHistory() }
+                        historyAdapter.submit(list)
+                    }
+                }
+            )
+            rv.layoutManager = GridLayoutManager(this, 2)
+            rv.adapter = historyAdapter
+
+            lifecycleScope.launch {
+                val list = withContext(Dispatchers.IO) { store.listHistory() }
+                historyAdapter.submit(list)
+            }
+
+            btnClear.setOnClickListener {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("清空历史")
+                    .setMessage("确定清空全部翻译历史吗？")
+                    .setPositiveButton("清空") { _, _ ->
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.IO) { store.clearHistory() }
+                            historyAdapter.submit(emptyList())
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
         }
 
         dialog.show()
+    }
+
+    private fun TranslateConversation.toCard(): TranslateConversationCard {
+        val first = turns.firstOrNull()?.input?.trim().orEmpty()
+        val title = if (first.isBlank()) "(空)" else {
+            val t = first.replace("\n", " ")
+            val parts = t.split(Regex("\\s+")).filter { it.isNotBlank() }
+            val head = parts.take(3).joinToString(" ").take(24)
+            if (head.length < t.length) head + "..." else head
+        }
+        return TranslateConversationCard(id = id, updatedAt = updatedAt, title = title)
     }
 
     companion object {

@@ -1,3 +1,12 @@
 <resources>
-    <!-- legacy placeholder; themes are in themes.xml -->
+    <!-- Dialog that slides down from top (for Translate history drawer) -->
+    <style name="TopSheetDialog" parent="ThemeOverlay.MaterialComponents.Dialog">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowAnimationStyle">@style/TopSheetDialogAnimation</item>
+    </style>
+
+    <style name="TopSheetDialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/slide_in_top</item>
+        <item name="android:windowExitAnimation">@anim/slide_out_top</item>
+    </style>
 </resources>

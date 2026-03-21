@@ -82,7 +82,10 @@ class MusicHomeFragment : Fragment() {
 
         b.etSearch.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) refreshHistory()
+            // History panel must be above track list; otherwise rvTracks (declared later in XML)
+            // will cover it and make items unclickable.
             b.historyPanel.visibility = if (hasFocus) View.VISIBLE else View.GONE
+            b.rvTracks.visibility = if (hasFocus) View.GONE else View.VISIBLE
         }
         b.etSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
@@ -212,7 +215,7 @@ class MusicHomeFragment : Fragment() {
         val ctx = requireContext()
         lifecycleScope.launch {
             val cur = withContext(Dispatchers.IO) { store.getSettings() }
-            val sources = arrayOf("API1", "API2")
+            val sources = arrayOf("音源1", "音源2")
             val sourceValues = arrayOf(MusicSourceType.API1_GDSTUDIO, MusicSourceType.API2_WYAPI)
             val checked = sourceValues.indexOf(cur.downloadSource).coerceAtLeast(0)
             MaterialAlertDialogBuilder(ctx)
@@ -321,7 +324,7 @@ class MusicHomeFragment : Fragment() {
         val ctx = requireContext()
         lifecycleScope.launch {
             val cur = withContext(Dispatchers.IO) { store.getSource() }
-            val items = arrayOf("GD Studio（API1）", "网易云无损（API2）")
+            val items = arrayOf("音源1", "音源2")
             val values = arrayOf(MusicSourceType.API1_GDSTUDIO, MusicSourceType.API2_WYAPI)
             val checked = values.indexOf(cur).coerceAtLeast(0)
             MaterialAlertDialogBuilder(ctx)

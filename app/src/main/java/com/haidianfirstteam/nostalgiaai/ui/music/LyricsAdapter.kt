@@ -3,6 +3,7 @@ package com.haidianfirstteam.nostalgiaai.ui.music
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.View
+import android.graphics.BlurMaskFilter
 import androidx.recyclerview.widget.RecyclerView
 import androidx.core.content.ContextCompat
 import com.haidianfirstteam.nostalgiaai.databinding.ItemLyricLineBinding
@@ -80,6 +81,27 @@ class LyricsAdapter(
             }
             b.tvLine.alpha = alpha
             b.tvTrans.alpha = alpha * 0.82f
+
+            // Make far-away lines look "blurred" (frosted) to reduce visual noise.
+            // NOTE: Must reset on every bind because RecyclerView recycles views.
+            val blurRadius = when {
+                dist >= 4 -> 6f
+                dist == 3 -> 3f
+                else -> 0f
+            }
+            if (blurRadius > 0f) {
+                b.tvLine.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                b.tvTrans.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                val f = BlurMaskFilter(blurRadius, BlurMaskFilter.Blur.NORMAL)
+                b.tvLine.paint.maskFilter = f
+                b.tvTrans.paint.maskFilter = f
+            } else {
+                b.tvLine.paint.maskFilter = null
+                b.tvTrans.paint.maskFilter = null
+                // Keep default layer type.
+                b.tvLine.setLayerType(View.LAYER_TYPE_NONE, null)
+                b.tvTrans.setLayerType(View.LAYER_TYPE_NONE, null)
+            }
 
             b.tvLine.textSize = when (dist) {
                 0 -> 20f

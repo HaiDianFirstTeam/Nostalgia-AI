@@ -64,13 +64,13 @@
     <!-- Fade scrims for native lyrics feel -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="92dp"
         android:layout_marginTop="?attr/actionBarSize"
         android:background="@drawable/bg_lyrics_fade_top" />
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="96dp"
+        android:layout_height="140dp"
         android:layout_gravity="bottom"
         android:background="@drawable/bg_lyrics_fade_bottom" />
 
