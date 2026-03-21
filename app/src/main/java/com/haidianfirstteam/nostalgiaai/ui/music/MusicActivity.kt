@@ -10,8 +10,6 @@ import com.haidianfirstteam.nostalgiaai.databinding.ActivityMusicBinding
 import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi1Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi2Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicSourceType
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
 import com.haidianfirstteam.nostalgiaai.ui.music.ui.CoverLoader
@@ -29,7 +27,6 @@ class MusicActivity : BaseActivity() {
 
     private lateinit var store: MusicStore
     private val api1 = MusicApi1Client()
-    private val api2 = MusicApi2Client()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,11 +67,7 @@ class MusicActivity : BaseActivity() {
                 CoroutineScope(Dispatchers.Main).launch {
                     val coverUrl = withContext(Dispatchers.IO) {
                         try {
-                            if (t!!.source == "wyapi") {
-                                t.coverId
-                            } else {
-                                api1.getCoverUrl(source = t.source.ifBlank { "netease" }, picId = t.coverId!!, size = 300)
-                            }
+                            api1.getCoverUrl(source = t!!.source.ifBlank { "netease" }, picId = t.coverId!!, size = 300)
                         } catch (_: Throwable) {
                             null
                         }
@@ -94,9 +87,9 @@ class MusicActivity : BaseActivity() {
                 try {
                     val url = withContext(Dispatchers.IO) {
                         val s = store.getSettings()
-                        if (s.source == MusicSourceType.API2_WYAPI || track.source == "wyapi") {
-                            val level = s.quality.streamLevel ?: "standard"
-                            api2.getPlayUrl(track.id, level).url
+                        MusicPlayerManager.setSpeed(s.playbackSpeed)
+                        if (track.source == "local") {
+                            track.id
                         } else {
                             val br = s.quality.streamBr ?: 320
                             api1.getPlayUrl(source = track.source.ifBlank { "netease" }, trackId = track.id, br = br).url

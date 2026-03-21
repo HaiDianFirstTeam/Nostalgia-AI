@@ -91,31 +91,14 @@ class MusicPlaylistDetailActivity : BaseActivity() {
 
     private fun batchDownload() {
         if (tracks.isEmpty()) return
-        val inputSource = arrayOf("音源1", "音源2")
         val inputQ1 = arrayOf("128", "192", "320", "740", "999")
-        val inputQ2 = arrayOf("standard", "exhigh", "lossless", "hires")
-        // Very simple picker chain.
         MaterialAlertDialogBuilder(this)
-            .setTitle("选择下载音源")
-            .setItems(inputSource) { _, whichSource ->
-                if (whichSource == 0) {
-                    MaterialAlertDialogBuilder(this)
-                        .setTitle("选择音质(API1)")
-                        .setItems(inputQ1) { _, w ->
-                            val br = inputQ1[w].toInt()
-                            doBatchDownloadApi1(br)
-                        }
-                        .show()
-                } else {
-                    MaterialAlertDialogBuilder(this)
-                        .setTitle("选择音质(API2)")
-                        .setItems(inputQ2) { _, w ->
-                            val level = inputQ2[w]
-                            doBatchDownloadApi2(level)
-                        }
-                        .show()
-                }
+            .setTitle("批量下载：选择音质")
+            .setItems(inputQ1) { _, w ->
+                val br = inputQ1[w].toInt()
+                doBatchDownloadApi1(br)
             }
+            .setNegativeButton("取消", null)
             .show()
     }
 
@@ -127,32 +110,6 @@ class MusicPlaylistDetailActivity : BaseActivity() {
                 for (t in tracks) {
                     try {
                         val url = api1.getPlayUrl(source = "netease", trackId = t.id, br = br).url
-                        MusicDownloader.enqueue(this@MusicPlaylistDetailActivity, t, url)
-                    } catch (e: Throwable) {
-                        errors.add(t.name)
-                    }
-                }
-            }
-            if (errors.isEmpty()) {
-                com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(this@MusicPlaylistDetailActivity, "已加入批量下载")
-            } else {
-                MaterialAlertDialogBuilder(this@MusicPlaylistDetailActivity)
-                    .setTitle("部分失败")
-                    .setMessage(errors.take(30).joinToString("\n"))
-                    .setPositiveButton("确定", null)
-                    .show()
-            }
-        }
-    }
-
-    private fun doBatchDownloadApi2(level: String) {
-        val api2 = com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi2Client()
-        lifecycleScope.launch {
-            val errors = ArrayList<String>()
-            withContext(Dispatchers.IO) {
-                for (t in tracks) {
-                    try {
-                        val url = api2.getPlayUrl(t.id, level).url
                         MusicDownloader.enqueue(this@MusicPlaylistDetailActivity, t, url)
                     } catch (e: Throwable) {
                         errors.add(t.name)

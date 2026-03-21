@@ -12,8 +12,6 @@ import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.databinding.ActivityMusicLyricsBinding
 import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi1Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi2Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicSourceType
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
 import com.haidianfirstteam.nostalgiaai.ui.music.lyrics.LrcParser
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
@@ -25,7 +23,6 @@ import kotlinx.coroutines.withContext
 class MusicLyricsActivity : BaseActivity() {
     private lateinit var binding: ActivityMusicLyricsBinding
     private val api1 = MusicApi1Client()
-    private val api2 = MusicApi2Client()
     private lateinit var store: MusicStore
     private lateinit var adapter: LyricsAdapter
     private val handler = Handler(Looper.getMainLooper())
@@ -156,8 +153,7 @@ class MusicLyricsActivity : BaseActivity() {
             lifecycleScope.launch {
                 val coverUrl = withContext(Dispatchers.IO) {
                     try {
-                        if (track.source == "wyapi") track.coverId
-                        else api1.getCoverUrl(track.source.ifBlank { "netease" }, track.coverId!!, 500)
+                        api1.getCoverUrl(track.source.ifBlank { "netease" }, track.coverId!!, 500)
                     } catch (_: Throwable) {
                         null
                     }
@@ -171,13 +167,8 @@ class MusicLyricsActivity : BaseActivity() {
             binding.progress.visibility = android.view.View.VISIBLE
             try {
                 val pair = withContext(Dispatchers.IO) {
-                    val settings = store.getSettings()
-                    if (settings.source == MusicSourceType.API2_WYAPI || track.source == "wyapi") {
-                        api2.getLyricPair(track.id)
-                    } else {
-                        // API1 uses lyric_id == track_id typically.
-                        api1.getLyric(source = track.source.ifBlank { "netease" }, lyricId = track.id)
-                    }
+                    // API1 uses lyric_id == track_id typically.
+                    api1.getLyric(source = track.source.ifBlank { "netease" }, lyricId = track.id)
                 }
                 val lines = LrcParser.parseBilingual(pair.first, pair.second)
                 adapter.submit(lines)

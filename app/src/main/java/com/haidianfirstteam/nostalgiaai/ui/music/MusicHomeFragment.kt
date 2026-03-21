@@ -12,7 +12,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.databinding.FragmentMusicHomeBinding
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi1Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi2Client
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicSourceType
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
@@ -28,7 +27,6 @@ class MusicHomeFragment : Fragment() {
 
     private lateinit var store: MusicStore
     private val api1 = MusicApi1Client()
-    private val api2 = MusicApi2Client()
     private lateinit var trackAdapter: TrackAdapter
     private lateinit var historyAdapter: HistoryAdapter
 
@@ -73,12 +71,15 @@ class MusicHomeFragment : Fragment() {
         }
 
         b.btnSwitchSource.setOnClickListener {
-            showSourceDialog()
+            // Source2 removed. Keep button hidden.
         }
+        b.btnSwitchSource.visibility = View.GONE
 
         b.btnAddPlaylist.setOnClickListener {
-            showAddPlaylistDialog()
+            // Source2 removed; playlist parsing is temporarily disabled.
+            com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "音源2已移除：歌单/专辑解析功能暂不可用")
         }
+        b.btnAddPlaylist.visibility = View.GONE
 
         b.etSearch.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) refreshHistory()
@@ -181,28 +182,20 @@ class MusicHomeFragment : Fragment() {
             b.progress.visibility = View.VISIBLE
             try {
                 val settings = withContext(Dispatchers.IO) { store.getSettings() }
-                val src = settings.source
+
+                // Apply persisted playback speed (best-effort).
+                MusicPlayerManager.setSpeed(settings.playbackSpeed)
 
                 // First play: if default stream quality not set, prompt user here.
-                if (src == MusicSourceType.API2_WYAPI && settings.quality.streamLevel.isNullOrBlank()) {
-                    b.progress.visibility = View.GONE
-                    pickApi2StreamQualityThenPlay(t, settings)
-                    return@launch
-                }
-                if (src == MusicSourceType.API1_GDSTUDIO && settings.quality.streamBr == null) {
+                if (settings.quality.streamBr == null) {
                     b.progress.visibility = View.GONE
                     pickApi1StreamQualityThenPlay(t, settings)
                     return@launch
                 }
 
                 val url = withContext(Dispatchers.IO) {
-                    if (src == MusicSourceType.API2_WYAPI) {
-                        val level = settings.quality.streamLevel ?: "standard"
-                        api2.getPlayUrl(t.id, level).url
-                    } else {
-                        val br = settings.quality.streamBr ?: 320
-                        api1.getPlayUrl(source = t.source.ifBlank { "netease" }, trackId = t.id, br = br).url
-                    }
+                    val br = settings.quality.streamBr ?: 320
+                    api1.getPlayUrl(source = t.source.ifBlank { "netease" }, trackId = t.id, br = br).url
                 }
                 withContext(Dispatchers.IO) { store.addPlayHistory(t) }
                 MusicPlayerManager.playSingle(requireContext().applicationContext, t, url)
@@ -223,30 +216,12 @@ class MusicHomeFragment : Fragment() {
         val ctx = requireContext()
         val items = arrayOf("128", "192", "320", "740", "999")
         MaterialAlertDialogBuilder(ctx)
-            .setTitle("首次播放：选择默认音质(音源1)")
+            .setTitle("首次播放：选择默认音质")
             .setItems(items) { _, which ->
                 val br = items[which].toInt()
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         store.setSettings(cur.copy(quality = cur.quality.copy(streamBr = br)))
-                    }
-                    playTrack(t)
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun pickApi2StreamQualityThenPlay(t: MusicTrack, cur: com.haidianfirstteam.nostalgiaai.ui.music.data.MusicSettings) {
-        val ctx = requireContext()
-        val items = arrayOf("standard", "exhigh", "lossless", "hires")
-        MaterialAlertDialogBuilder(ctx)
-            .setTitle("首次播放：选择默认音质(音源2)")
-            .setItems(items) { _, which ->
-                val level = items[which]
-                lifecycleScope.launch {
-                    withContext(Dispatchers.IO) {
-                        store.setSettings(cur.copy(quality = cur.quality.copy(streamLevel = level)))
                     }
                     playTrack(t)
                 }
@@ -261,33 +236,18 @@ class MusicHomeFragment : Fragment() {
             val cur = withContext(Dispatchers.IO) { store.getSettings() }
 
             // First download: if default download quality not set, prompt user here.
-            when (cur.downloadSource) {
-                MusicSourceType.API2_WYAPI -> {
-                    if (cur.quality.downloadLevel.isNullOrBlank()) {
-                        pickApi2DownloadQualityFirstTime(t, cur)
-                        return@launch
-                    }
-                }
-                else -> {
-                    if (cur.quality.downloadBr == null) {
-                        pickApi1DownloadQualityFirstTime(t, cur)
-                        return@launch
-                    }
-                }
+            if (cur.quality.downloadBr == null) {
+                pickApi1DownloadQualityFirstTime(t, cur)
+                return@launch
             }
 
             // Defaults are ready: one-click download.
             b.progress.visibility = View.VISIBLE
             try {
                 val url = withContext(Dispatchers.IO) {
-                    if (cur.downloadSource == MusicSourceType.API2_WYAPI) {
-                        val level = cur.quality.downloadLevel ?: "standard"
-                        api2.getPlayUrl(t.id, level).url
-                    } else {
-                        val br = cur.quality.downloadBr ?: 320
-                        // API1 expects the provider source string, not our internal track.source.
-                        api1.getPlayUrl(source = "netease", trackId = t.id, br = br).url
-                    }
+                    val br = cur.quality.downloadBr ?: 320
+                    // API1 expects the provider source string, not our internal track.source.
+                    api1.getPlayUrl(source = "netease", trackId = t.id, br = br).url
                 }
                 MusicDownloader.enqueue(ctx, t, url)
                 com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已加入下载")
@@ -307,7 +267,7 @@ class MusicHomeFragment : Fragment() {
         val ctx = requireContext()
         val items = arrayOf("128", "192", "320", "740", "999")
         MaterialAlertDialogBuilder(ctx)
-            .setTitle("首次下载：选择默认音质(音源1)")
+            .setTitle("首次下载：选择默认音质")
             .setItems(items) { _, which ->
                 val br = items[which].toInt()
                 lifecycleScope.launch {
@@ -321,44 +281,12 @@ class MusicHomeFragment : Fragment() {
             .show()
     }
 
-    private fun pickApi2DownloadQualityFirstTime(t: MusicTrack, cur: com.haidianfirstteam.nostalgiaai.ui.music.data.MusicSettings) {
-        val ctx = requireContext()
-        val items = arrayOf("standard", "exhigh", "lossless", "hires")
-        MaterialAlertDialogBuilder(ctx)
-            .setTitle("首次下载：选择默认音质(音源2)")
-            .setItems(items) { _, which ->
-                val level = items[which]
-                lifecycleScope.launch {
-                    withContext(Dispatchers.IO) {
-                        store.setSettings(cur.copy(downloadSource = MusicSourceType.API2_WYAPI, quality = cur.quality.copy(downloadLevel = level)))
-                    }
-                    downloadTrack(t)
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
     private fun showDownloadDialog(t: MusicTrack) {
         val ctx = requireContext()
         lifecycleScope.launch {
             val cur = withContext(Dispatchers.IO) { store.getSettings() }
-            val sources = arrayOf("音源1", "音源2")
-            val sourceValues = arrayOf(MusicSourceType.API1_GDSTUDIO, MusicSourceType.API2_WYAPI)
-            val checked = sourceValues.indexOf(cur.downloadSource).coerceAtLeast(0)
-            MaterialAlertDialogBuilder(ctx)
-                .setTitle("选择下载音源")
-                .setSingleChoiceItems(sources, checked) { d, which ->
-                    d.dismiss()
-                    val src = sourceValues[which]
-                    if (src == MusicSourceType.API2_WYAPI) {
-                        pickApi2DownloadQuality(t, cur)
-                    } else {
-                        pickApi1DownloadQuality(t, cur)
-                    }
-                }
-                .setNegativeButton("取消", null)
-                .show()
+            // Source2 removed: keep a simple per-download quality picker.
+            pickApi1DownloadQuality(t, cur)
         }
     }
 
@@ -405,123 +333,11 @@ class MusicHomeFragment : Fragment() {
             .show()
     }
 
-    private fun pickApi2DownloadQuality(t: MusicTrack, cur: com.haidianfirstteam.nostalgiaai.ui.music.data.MusicSettings) {
-        val ctx = requireContext()
-        val items = arrayOf("standard", "exhigh", "lossless", "hires")
-        MaterialAlertDialogBuilder(ctx)
-            .setTitle("选择音质(API2)")
-            .setItems(items) { _, which ->
-                val level = items[which]
-                val cb = android.widget.CheckBox(ctx).apply { text = "设为默认" }
-                MaterialAlertDialogBuilder(ctx)
-                    .setTitle("确认下载")
-                    .setMessage("${t.name} (${level})")
-                    .setView(cb)
-                    .setPositiveButton("下载") { _, _ ->
-                        lifecycleScope.launch {
-                            b.progress.visibility = View.VISIBLE
-                            try {
-                                val url = withContext(Dispatchers.IO) {
-                                    api2.getPlayUrl(t.id, level).url
-                                }
-                                if (cb.isChecked) {
-                                    val next = cur.copy(downloadSource = MusicSourceType.API2_WYAPI, quality = cur.quality.copy(downloadLevel = level))
-                                    withContext(Dispatchers.IO) { store.setSettings(next) }
-                                }
-                                MusicDownloader.enqueue(ctx, t, url)
-                                com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已加入下载")
-                            } catch (e: Throwable) {
-                                MaterialAlertDialogBuilder(ctx)
-                                    .setTitle("下载失败")
-                                    .setMessage(e.message ?: "未知错误")
-                                    .setPositiveButton("确定", null)
-                                    .show()
-                            } finally {
-                                b.progress.visibility = View.GONE
-                            }
-                        }
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun showSourceDialog() {
-        val ctx = requireContext()
-        lifecycleScope.launch {
-            val cur = withContext(Dispatchers.IO) { store.getSource() }
-            val items = arrayOf("音源1", "音源2")
-            val values = arrayOf(MusicSourceType.API1_GDSTUDIO, MusicSourceType.API2_WYAPI)
-            val checked = values.indexOf(cur).coerceAtLeast(0)
-            MaterialAlertDialogBuilder(ctx)
-                .setTitle("切换音源")
-                .setSingleChoiceItems(items, checked) { d, which ->
-                    lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { store.setSource(values[which]) }
-                        com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已切换")
-                    }
-                    d.dismiss()
-                }
-                .setNegativeButton("取消", null)
-                .show()
-        }
-    }
+    // Source2 removed: no source switch dialog.
 
     private fun showAddPlaylistDialog() {
-        val ctx = requireContext()
-        val input = android.widget.EditText(ctx)
-        input.hint = "歌单ID 或 专辑ID"
-        MaterialAlertDialogBuilder(ctx)
-            .setTitle("添加并解析")
-            .setView(input)
-            .setPositiveButton("解析") { _, _ ->
-                val raw = input.text?.toString().orEmpty().trim()
-                if (raw.isBlank()) return@setPositiveButton
-                // Keep it simple: extract digits.
-                val id = raw.filter { it.isDigit() }
-                if (id.isBlank()) {
-                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "无效ID")
-                    return@setPositiveButton
-                }
-                lifecycleScope.launch {
-                    b.progress.visibility = View.VISIBLE
-                    try {
-                        val tracks = withContext(Dispatchers.IO) {
-                            api2.getPlaylistTracks(id)
-                        }
-                        val nameInput = android.widget.EditText(ctx)
-                        nameInput.setText("歌单${id}")
-                        MaterialAlertDialogBuilder(ctx)
-                            .setTitle("保存为歌单")
-                            .setView(nameInput)
-                            .setPositiveButton("保存") { _, _ ->
-                                lifecycleScope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        val pl = store.createPlaylist(nameInput.text?.toString().orEmpty())
-                                        store.upsertPlaylist(pl.copy(tracks = tracks))
-                                    }
-                                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已保存歌单 (${tracks.size}首)")
-                                }
-                            }
-                            .setNegativeButton("仅查看", null)
-                            .show()
-
-                        trackAdapter.submit(tracks)
-                    } catch (t: Throwable) {
-                        MaterialAlertDialogBuilder(ctx)
-                            .setTitle("解析失败")
-                            .setMessage(t.message ?: "未知错误")
-                            .setPositiveButton("确定", null)
-                            .show()
-                    } finally {
-                        b.progress.visibility = View.GONE
-                    }
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
+        // Source2 removed; keep as a stub.
+        com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "音源2已移除：歌单/专辑解析功能暂不可用")
     }
 
     private fun refreshHistory() {
@@ -544,10 +360,7 @@ class MusicHomeFragment : Fragment() {
             try {
                 val tracks: List<MusicTrack> = withContext(Dispatchers.IO) {
                     store.addSearchHistory(keyword)
-                    when (store.getSource()) {
-                        MusicSourceType.API2_WYAPI -> api2.search(keyword = keyword, page = 1)
-                        MusicSourceType.API1_GDSTUDIO -> api1.search(source = "netease", keyword = keyword, page = 1, count = 20)
-                    }
+                    api1.search(source = "netease", keyword = keyword, page = 1, count = 20)
                 }
                 trackAdapter.submit(tracks)
             } catch (t: Throwable) {

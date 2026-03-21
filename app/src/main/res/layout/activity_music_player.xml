@@ -62,6 +62,38 @@
 
         </FrameLayout>
 
+        <!-- Back to cover (shown only in lyrics mode) -->
+        <LinearLayout
+            android:id="@+id/btnBackCover"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="@+id/coverContainer"
+            app:layout_constraintStart_toEndOf="@+id/coverContainer"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginStart="10dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                app:srcCompat="@android:drawable/ic_menu_revert"
+                app:tint="?attr/colorControlNormal" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="返回封面"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorPrimary" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/tvTitle"
             android:layout_width="0dp"
@@ -126,6 +158,16 @@
                 android:background="@android:color/transparent"
                 android:contentDescription="模式"
                 app:srcCompat="@android:drawable/ic_menu_rotate"
+                app:tint="?attr/colorControlNormal" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/btnSpeed"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="4dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="倍速"
+                app:srcCompat="@android:drawable/ic_media_ff"
                 app:tint="?attr/colorControlNormal" />
 
             <androidx.appcompat.widget.AppCompatImageButton

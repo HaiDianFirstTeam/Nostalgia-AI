@@ -97,6 +97,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.music.MusicLocalImportActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>

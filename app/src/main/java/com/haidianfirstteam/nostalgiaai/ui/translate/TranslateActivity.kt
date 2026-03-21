@@ -401,102 +401,59 @@ class TranslateActivity : BaseActivity() {
         val rv = view.findViewById<androidx.recyclerview.widget.RecyclerView>(com.haidianfirstteam.nostalgiaai.R.id.rvTranslateHistory)
         val btnClear = view.findViewById<android.view.View>(com.haidianfirstteam.nostalgiaai.R.id.btnClearTranslateHistory)
 
-        if (settings.memoryEnabled) {
-            tvTitle.text = "对话"
-            lateinit var convListAdapter: TranslateConversationHistoryAdapter
-            convListAdapter = TranslateConversationHistoryAdapter(
-                onClick = { card ->
-                    lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { store.setActiveConversationId(card.id) }
-                        applyMemoryModeUi()
-                        dialog.dismiss()
-                    }
-                },
-                onDelete = { card ->
-                    lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { store.deleteConversation(card.id) }
-                        val list = withContext(Dispatchers.IO) { store.listConversations() }
-                        convListAdapter.submit(list.map { it.toCard() })
-                    }
-                }
-            )
-            rv.layoutManager = GridLayoutManager(this, 2)
-            rv.adapter = convListAdapter
-
-            lifecycleScope.launch {
-                val list = withContext(Dispatchers.IO) { store.listConversations() }
-                convListAdapter.submit(list.map { it.toCard() })
-            }
-
-            btnClear.setOnClickListener {
-                MaterialAlertDialogBuilder(this)
-                    .setTitle("清空对话")
-                    .setMessage("确定清空全部翻译对话吗？")
-                    .setPositiveButton("清空") { _, _ ->
-                        lifecycleScope.launch {
-                            withContext(Dispatchers.IO) { store.clearConversations() }
-                            withContext(Dispatchers.IO) { store.newConversation() }
-                            applyMemoryModeUi()
-                            dialog.dismiss()
-                        }
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
-        } else {
-            tvTitle.text = "历史记录"
-            // Must be declared before lambdas capture it (avoid forward reference in initializer).
-            lateinit var historyAdapter: TranslateHistoryAdapter
-            historyAdapter = TranslateHistoryAdapter(
-                onClick = { item ->
+        // History cards should always be available (both memory/non-memory modes).
+        tvTitle.text = "历史记录"
+        // Must be declared before lambdas capture it (avoid forward reference in initializer).
+        lateinit var historyAdapter: TranslateHistoryAdapter
+        historyAdapter = TranslateHistoryAdapter(
+            onClick = { item ->
+                if (settings.memoryEnabled) {
+                    // Memory mode: append this as a new turn into current conversation.
+                    val now = System.currentTimeMillis()
+                    val turn = item.copy(id = now, createdAt = now)
+                    convAdapter.append(turn)
+                    val n = convAdapter.snapshot().size
+                    if (n > 0) binding.rvChat.scrollToPosition(n - 1)
+                    lifecycleScope.launch(Dispatchers.IO) { store.appendTurnToActiveConversation(turn) }
+                    dialog.dismiss()
+                } else {
                     currentInput = item.input
                     currentOutput = item.output
                     (binding.rvChat.adapter as? TranslateChatAdapter)?.submit(currentInput, currentOutput)
                     dialog.dismiss()
-                },
-                onDelete = { item ->
+                }
+            },
+            onDelete = { item ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { store.deleteHistory(item.id) }
+                    val list = withContext(Dispatchers.IO) { store.listHistory() }
+                    historyAdapter.submit(list)
+                }
+            }
+        )
+        rv.layoutManager = GridLayoutManager(this, 2)
+        rv.adapter = historyAdapter
+
+        lifecycleScope.launch {
+            val list = withContext(Dispatchers.IO) { store.listHistory() }
+            historyAdapter.submit(list)
+        }
+
+        btnClear.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("清空历史")
+                .setMessage("确定清空全部翻译历史吗？")
+                .setPositiveButton("清空") { _, _ ->
                     lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { store.deleteHistory(item.id) }
-                        val list = withContext(Dispatchers.IO) { store.listHistory() }
-                        historyAdapter.submit(list)
+                        withContext(Dispatchers.IO) { store.clearHistory() }
+                        historyAdapter.submit(emptyList())
                     }
                 }
-            )
-            rv.layoutManager = GridLayoutManager(this, 2)
-            rv.adapter = historyAdapter
-
-            lifecycleScope.launch {
-                val list = withContext(Dispatchers.IO) { store.listHistory() }
-                historyAdapter.submit(list)
-            }
-
-            btnClear.setOnClickListener {
-                MaterialAlertDialogBuilder(this)
-                    .setTitle("清空历史")
-                    .setMessage("确定清空全部翻译历史吗？")
-                    .setPositiveButton("清空") { _, _ ->
-                        lifecycleScope.launch {
-                            withContext(Dispatchers.IO) { store.clearHistory() }
-                            historyAdapter.submit(emptyList())
-                        }
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
+                .setNegativeButton("取消", null)
+                .show()
         }
 
         dialog.show()
-    }
-
-    private fun TranslateConversation.toCard(): TranslateConversationCard {
-        val first = turns.firstOrNull()?.input?.trim().orEmpty()
-        val title = if (first.isBlank()) "(空)" else {
-            val t = first.replace("\n", " ")
-            val parts = t.split(Regex("\\s+")).filter { it.isNotBlank() }
-            val head = parts.take(3).joinToString(" ").take(24)
-            if (head.length < t.length) head + "..." else head
-        }
-        return TranslateConversationCard(id = id, updatedAt = updatedAt, title = title)
     }
 
     companion object {

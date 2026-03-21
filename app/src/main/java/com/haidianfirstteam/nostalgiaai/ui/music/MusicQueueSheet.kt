@@ -10,8 +10,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.databinding.SheetMusicQueueBinding
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi1Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi2Client
-import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicSourceType
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +26,6 @@ object MusicQueueSheet {
         val app = context.applicationContext as? NostalgiaApp
         val store = app?.let { MusicStore(it.db) }
         val api1 = MusicApi1Client()
-        val api2 = MusicApi2Client()
 
         val adapter = QueueAdapter(
             onClick = { idx ->
@@ -39,10 +36,9 @@ object MusicQueueSheet {
                     try {
                         val url = withContext(Dispatchers.IO) {
                             val s = store.getSettings()
-                            // Choose resolver by track source when possible.
-                            if (t.source == "wyapi" || s.source == MusicSourceType.API2_WYAPI) {
-                                val level = s.quality.streamLevel ?: "standard"
-                                api2.getPlayUrl(t.id, level).url
+                            MusicPlayerManager.setSpeed(s.playbackSpeed)
+                            if (t.source == "local") {
+                                t.id
                             } else {
                                 val br = s.quality.streamBr ?: 320
                                 api1.getPlayUrl(source = t.source.ifBlank { "netease" }, trackId = t.id, br = br).url

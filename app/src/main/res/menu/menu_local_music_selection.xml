@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_add_to_queue"
+        android:title="加入播放列表"
+        android:icon="@android:drawable/ic_media_play"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_add_to_playlist"
+        android:title="加入歌单"
+        android:icon="@android:drawable/ic_menu_add"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_delete"
+        android:title="删除"
+        android:icon="@android:drawable/ic_menu_delete"
+        app:showAsAction="ifRoom" />
+
+</menu>

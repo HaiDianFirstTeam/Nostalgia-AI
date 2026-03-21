@@ -19,7 +19,8 @@ class TranslateEngine(private val db: AppDatabase) {
 
     suspend fun translate(settings: TranslateSettings, text: String, history: List<TranslateHistoryItem>): String {
         val route = pickRoute(settings)
-        val sys = buildSystemPrompt(settings)
+        val aliases = if (settings.memoryEnabled) extractAliasMap(history) else emptyMap()
+        val sys = buildSystemPrompt(settings, aliases)
         val messages = ArrayList<OpenAiMessage>()
         messages.add(OpenAiMessage("system", sys))
 
@@ -33,7 +34,8 @@ class TranslateEngine(private val db: AppDatabase) {
             }
         }
 
-        messages.add(OpenAiMessage("user", text))
+        val userText = if (settings.memoryEnabled) applyAliasesIfNeeded(text, aliases) else text
+        messages.add(OpenAiMessage("user", userText))
 
         val req = OpenAiChatRequest(
             model = route.modelName,
@@ -92,7 +94,7 @@ class TranslateEngine(private val db: AppDatabase) {
         return Route(provider.baseUrl, key.apiKey, model.modelName)
     }
 
-    private fun buildSystemPrompt(s: TranslateSettings): String {
+    private fun buildSystemPrompt(s: TranslateSettings, aliases: Map<String, String>): String {
         val a = s.langA
         val b = s.langB
         val modeText = when (s.mode) {
@@ -103,16 +105,72 @@ class TranslateEngine(private val db: AppDatabase) {
         val identity = s.identity.trim()
         val who = if (identity.isBlank()) "" else "\n\n你的身份设定：${identity}"
         val from = if (a == "auto") "自动检测源语言" else "源语言：${a}"
+
+        val aliasBlock = if (s.memoryEnabled) {
+            val sb = StringBuilder()
+            sb.append("\n\n记忆模式规则（必须遵守）：\n")
+            sb.append("- 如果用户在对话中声明类似：A表示小明 / A=小明 / A代表小明，则后续输入中出现 A 默认指代 小明。\n")
+            sb.append("- 翻译时应按指代含义处理（例如把 A 按小明来翻译/输出），而不是把 A 原样保留。\n")
+            sb.append("- 指代严格区分大小写：A 与 a 是不同的符号。\n")
+            if (aliases.isNotEmpty()) {
+                sb.append("\n当前已知指代表：\n")
+                for ((k, v) in aliases) {
+                    sb.append("- ").append(k).append(" => ").append(v).append("\n")
+                }
+            }
+            sb.toString()
+        } else {
+            ""
+        }
         return (
             "你是一个严格的翻译引擎。任务：把用户输入翻译为目标语言。\n" +
                 "${from}；目标语言：${b}；翻译模式：${modeText}。" +
                 who +
+                aliasBlock +
                 "\n\n输出规则（必须遵守）：\n" +
                 "1) 只输出翻译结果本身，不要解释，不要加前后缀，不要加引号，不要加多余换行。\n" +
                 "2) 保持原文格式：如果是单词/词组就精简；如果是句子/文章就自然流畅。\n" +
                 "3) 如果无法翻译，输出空字符串。\n" +
                 "4) 禁止输出任何提示语，例如：'翻译如下'、'译文：' 等。"
         )
+    }
+
+    private fun extractAliasMap(history: List<TranslateHistoryItem>): Map<String, String> {
+        // Pattern examples:
+        // - a表示小明
+        // - A = 小明
+        // - a 代表 小明
+        val re = Regex("\\b([A-Za-z])\\b\\s*(?:表示|代表|=|:=|为)\\s*([^\\n，,。\\.]{1,30})")
+        val out = LinkedHashMap<String, String>()
+        val ordered = history.sortedBy { it.createdAt }
+        for (h in ordered) {
+            val input = h.input
+            for (m in re.findAll(input)) {
+                val k = m.groupValues[1].trim()
+                val v = m.groupValues[2].trim()
+                if (k.isNotBlank() && v.isNotBlank()) {
+                    // Case-sensitive: keep original letter as key.
+                    out[k] = v
+                }
+            }
+        }
+        return out
+    }
+
+    private fun applyAliasesIfNeeded(text: String, aliases: Map<String, String>): String {
+        if (aliases.isEmpty()) return text
+
+        // If this line itself is defining an alias, don't expand inside the same input.
+        val defineRe = Regex("\\b([A-Za-z])\\b\\s*(?:表示|代表|=|:=|为)\\s*[^\\n]{1,50}")
+        if (defineRe.containsMatchIn(text)) return text
+
+        var out = text
+        for ((k, v) in aliases) {
+            // Replace standalone token occurrences only.
+            val tokenRe = Regex("(?<![A-Za-z0-9_])" + Regex.escape(k) + "(?![A-Za-z0-9_])")
+            out = out.replace(tokenRe, v)
+        }
+        return out
     }
 }
 

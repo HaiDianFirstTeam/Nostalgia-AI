@@ -16,6 +16,7 @@ class MusicStore(
         private const val KEY_SETTINGS = "music_settings"
         private const val KEY_PLAY_HISTORY = "music_play_history"
         private const val KEY_PLAYLISTS = "music_playlists"
+        private const val KEY_LOCAL_MUSIC = "music_local_music"
         private const val MAX_HISTORY = 30
     }
 
@@ -33,19 +34,31 @@ class MusicStore(
         if (raw.isNullOrBlank()) {
             // Migrate old key_source if present.
             val legacy = db.appSettings().get(KEY_SOURCE)?.value
-            val src = when (legacy) {
-                MusicSourceType.API2_WYAPI.name -> MusicSourceType.API2_WYAPI
-                else -> MusicSourceType.API1_GDSTUDIO
-            }
+            // Source2 (API2) has been removed; always migrate to Source1.
+            val src = MusicSourceType.API1_GDSTUDIO
             val s = MusicSettings(source = src, downloadSource = src)
             setSettings(s)
             return s
         }
-        return try {
+
+        val parsed = try {
             gson.fromJson(raw, MusicSettings::class.java) ?: MusicSettings()
         } catch (_: Throwable) {
             MusicSettings()
         }
+
+        // Source2 (API2) has been removed. Force-migrate persisted settings.
+        if (parsed.source == MusicSourceType.API2_WYAPI || parsed.downloadSource == MusicSourceType.API2_WYAPI) {
+            val next = parsed.copy(
+                source = MusicSourceType.API1_GDSTUDIO,
+                downloadSource = MusicSourceType.API1_GDSTUDIO,
+                quality = parsed.quality.copy(streamLevel = null, downloadLevel = null)
+            )
+            setSettings(next)
+            return next
+        }
+
+        return parsed
     }
 
     suspend fun setSettings(settings: MusicSettings) {
@@ -167,5 +180,39 @@ class MusicStore(
 
     suspend fun clearSearchHistory() {
         db.appSettings().put(AppSettingEntity(KEY_SEARCH_HISTORY, gson.toJson(emptyList<String>())))
+    }
+
+    suspend fun listLocalMusic(): List<LocalMusicItem> {
+        val raw = db.appSettings().get(KEY_LOCAL_MUSIC)?.value ?: return emptyList()
+        return try {
+            val t = object : TypeToken<List<LocalMusicItem>>() {}.type
+            val list: List<LocalMusicItem> = gson.fromJson(raw, t) ?: emptyList()
+            // stable ordering: newest first
+            list.sortedByDescending { it.addedAt }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun upsertLocalMusic(items: List<LocalMusicItem>) {
+        val old = listLocalMusic().toMutableList()
+        // de-dup by uri
+        for (it in items) {
+            old.removeAll { x -> x.uri == it.uri }
+            old.add(0, it)
+        }
+        // keep a reasonable cap
+        val next = old.take(1000)
+        db.appSettings().put(AppSettingEntity(KEY_LOCAL_MUSIC, gson.toJson(next)))
+    }
+
+    suspend fun deleteLocalMusic(uris: Set<String>) {
+        if (uris.isEmpty()) return
+        val next = listLocalMusic().filterNot { uris.contains(it.uri) }
+        db.appSettings().put(AppSettingEntity(KEY_LOCAL_MUSIC, gson.toJson(next)))
+    }
+
+    suspend fun clearLocalMusic() {
+        db.appSettings().put(AppSettingEntity(KEY_LOCAL_MUSIC, gson.toJson(emptyList<LocalMusicItem>())))
     }
 }

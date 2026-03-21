@@ -15,6 +15,12 @@ data class MusicPlayHistoryItem(
     val track: MusicTrack,
 )
 
+data class LocalMusicItem(
+    val uri: String,
+    val name: String,
+    val addedAt: Long,
+)
+
 enum class MusicPlayMode {
     ORDER,
     SHUFFLE,
@@ -36,4 +42,6 @@ data class MusicSettings(
     val downloadSource: MusicSourceType = MusicSourceType.API1_GDSTUDIO,
     val playMode: MusicPlayMode = MusicPlayMode.ORDER,
     val quality: MusicQualitySettings = MusicQualitySettings(),
+    // Playback speed (best-effort; depends on player capabilities)
+    val playbackSpeed: Float = 1.0f,
 )

@@ -1,10 +1,17 @@
 package com.haidianfirstteam.nostalgiaai.ui.music.player
 
 import android.content.Context
-import android.media.AudioManager
-import android.media.MediaPlayer
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.PlaybackException
+import com.google.android.exoplayer2.PlaybackParameters
+import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.audio.AudioAttributes
+import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
+import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
+import com.google.android.exoplayer2.upstream.DefaultDataSource
+import com.haidianfirstteam.nostalgiaai.net.HttpClients
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicPlayMode
 import kotlin.random.Random
@@ -18,10 +25,28 @@ data class NowPlaying(
 
 object MusicPlayerManager {
 
-    private var mp: MediaPlayer? = null
+    private var player: ExoPlayer? = null
     private var queue: MutableList<MusicTrack> = mutableListOf()
     private var index: Int = -1
     private var mode: MusicPlayMode = MusicPlayMode.ORDER
+
+    // Playback speed (applied on supported API levels)
+    @Volatile
+    private var speed: Float = 1.0f
+
+    fun getSpeed(): Float = speed
+
+    fun setSpeed(v: Float) {
+        val s = v.coerceIn(0.1f, 5.0f)
+        speed = s
+        val p = player
+        if (p != null) {
+            try {
+                p.playbackParameters = PlaybackParameters(s)
+            } catch (_: Throwable) {
+            }
+        }
+    }
 
     /**
      * Provide a resolver for auto-next playback. Called when the current track completes and
@@ -46,6 +71,19 @@ object MusicPlayerManager {
     }
 
     fun getQueue(): List<MusicTrack> = queue.toList()
+
+    fun addToQueue(tracks: List<MusicTrack>) {
+        if (tracks.isEmpty()) return
+        val wasEmpty = queue.isEmpty()
+        queue.addAll(tracks)
+        if (wasEmpty) {
+            // Keep index invalid until a play URL is resolved.
+            index = 0
+        } else {
+            if (index !in queue.indices) index = 0
+        }
+        post()
+    }
 
     fun getIndex(): Int = index
 
@@ -106,13 +144,13 @@ object MusicPlayerManager {
     }
 
     fun togglePause(): Boolean {
-        val p = mp ?: return false
+        val p = player ?: return false
         return if (p.isPlaying) {
             p.pause()
             post(playing = false)
             false
         } else {
-            p.start()
+            p.play()
             post(playing = true)
             true
         }
@@ -120,7 +158,9 @@ object MusicPlayerManager {
 
     fun getDurationMs(): Int {
         return try {
-            mp?.duration ?: 0
+            val d = player?.duration ?: 0L
+            if (d <= 0 || d == com.google.android.exoplayer2.C.TIME_UNSET) 0
+            else d.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         } catch (_: Throwable) {
             0
         }
@@ -128,7 +168,8 @@ object MusicPlayerManager {
 
     fun getPositionMs(): Int {
         return try {
-            mp?.currentPosition ?: 0
+            val p = player?.currentPosition ?: 0L
+            if (p <= 0) 0 else p.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         } catch (_: Throwable) {
             0
         }
@@ -138,18 +179,17 @@ object MusicPlayerManager {
         try {
             val d = getDurationMs()
             val p = positionMs.coerceIn(0, d.coerceAtLeast(0))
-            mp?.seekTo(p)
+            player?.seekTo(p.toLong())
         } catch (_: Throwable) {
         }
     }
 
     fun stop() {
         try {
-            mp?.setOnCompletionListener(null)
-            mp?.release()
+            player?.release()
         } catch (_: Throwable) {
         }
-        mp = null
+        player = null
         queue.clear()
         index = -1
         post(track = null, playing = false)
@@ -157,26 +197,59 @@ object MusicPlayerManager {
 
     private fun start(context: Context, track: MusicTrack, url: String) {
         try {
-            mp?.setOnCompletionListener(null)
-            mp?.release()
+            player?.release()
         } catch (_: Throwable) {
         }
-        mp = MediaPlayer().apply {
-            setAudioStreamType(AudioManager.STREAM_MUSIC)
-            setOnPreparedListener {
-                it.start()
-                post(track = track, playing = true)
+
+        val appCtx = context.applicationContext
+        // IMPORTANT: Use OkHttp data source to ensure Conscrypt-enabled TLS works on API 19.
+        val httpFactory = OkHttpDataSource.Factory(HttpClients.music())
+            .setUserAgent("Nostalgia-AI")
+        val dataSourceFactory = DefaultDataSource.Factory(appCtx, httpFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+
+        val p = ExoPlayer.Builder(appCtx)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build()
+
+        p.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(com.google.android.exoplayer2.C.USAGE_MEDIA)
+                .setContentType(com.google.android.exoplayer2.C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(),
+            true
+        )
+        p.setHandleAudioBecomingNoisy(true)
+
+        p.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_READY -> post(track = track, playing = p.isPlaying)
+                    Player.STATE_ENDED -> {
+                        post(track = track, playing = false)
+                        onComplete(appCtx)
+                    }
+                }
             }
-            setOnCompletionListener {
-                onComplete(context)
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                post(track = track, playing = isPlaying)
             }
-            setOnErrorListener { _, _, _ ->
+
+            override fun onPlayerError(error: PlaybackException) {
                 post(track = track, playing = false)
-                true
             }
-            setDataSource(url)
-            prepareAsync()
+        })
+
+        p.setMediaItem(com.google.android.exoplayer2.MediaItem.fromUri(url))
+        p.prepare()
+        try {
+            p.playbackParameters = PlaybackParameters(speed)
+        } catch (_: Throwable) {
         }
+        p.playWhenReady = true
+
+        player = p
         post(track = track, playing = false)
     }
 
@@ -215,7 +288,7 @@ object MusicPlayerManager {
     }
 
     private fun post(track: MusicTrack? = currentTrack(), playing: Boolean? = null) {
-        val isPlaying = playing ?: (mp?.isPlaying == true)
+        val isPlaying = playing ?: (player?.isPlaying == true)
         _state.postValue(
             NowPlaying(
                 track = track,
