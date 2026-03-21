@@ -8,40 +8,43 @@ import androidx.recyclerview.widget.RecyclerView
 object TutorialFinders {
 
     fun recyclerChildAt(recyclerId: Int, index: Int): (View) -> View? = { root ->
-        val rv = root.findViewById<RecyclerView>(recyclerId) ?: return@recyclerChildAt null
-        if (rv.childCount <= 0) return@recyclerChildAt null
-        rv.getChildAt(index.coerceIn(0, rv.childCount - 1))
+        val rv = root.findViewById<RecyclerView>(recyclerId)
+        if (rv == null || rv.childCount <= 0) null
+        else rv.getChildAt(index.coerceIn(0, rv.childCount - 1))
     }
 
     fun recyclerChildViewById(recyclerId: Int, childIndex: Int, viewId: Int): (View) -> View? = { root ->
-        val rv = root.findViewById<RecyclerView>(recyclerId) ?: return@recyclerChildViewById null
-        if (rv.childCount <= 0) return@recyclerChildViewById null
-        val item = rv.getChildAt(childIndex.coerceIn(0, rv.childCount - 1))
-        item.findViewById(viewId)
+        val rv = root.findViewById<RecyclerView>(recyclerId)
+        if (rv == null || rv.childCount <= 0) null
+        else {
+            val item = rv.getChildAt(childIndex.coerceIn(0, rv.childCount - 1))
+            item.findViewById(viewId)
+        }
     }
 
     fun listItemAt(listViewId: Int, index: Int): (View) -> View? = { root ->
-        val lv = root.findViewById<ListView>(listViewId) ?: return@listItemAt null
-        if (lv.childCount <= 0) return@listItemAt null
-        lv.getChildAt(index.coerceIn(0, lv.childCount - 1))
+        val lv = root.findViewById<ListView>(listViewId)
+        if (lv == null || lv.childCount <= 0) null
+        else lv.getChildAt(index.coerceIn(0, lv.childCount - 1))
     }
 
     fun bottomNavItem(bottomNavId: Int, menuItemId: Int): (View) -> View? = { root ->
-        val nav = root.findViewById<View>(bottomNavId) ?: return@bottomNavItem null
-        // In many cases, the menu item view id equals menuItemId.
-        findViewByIdRecursive(nav, menuItemId) ?: nav
+        val nav = root.findViewById<View>(bottomNavId)
+        if (nav == null) null
+        else (findViewByIdRecursive(nav, menuItemId) ?: nav)
     }
 
     fun toolbarMenuItem(toolbarId: Int, menuItemId: Int): (View) -> View? = { root ->
-        val tb = root.findViewById<View>(toolbarId) ?: return@toolbarMenuItem null
-        findViewByIdRecursive(tb, menuItemId) ?: tb
+        val tb = root.findViewById<View>(toolbarId)
+        if (tb == null) null
+        else (findViewByIdRecursive(tb, menuItemId) ?: tb)
     }
 
     fun preferenceByTitle(titleText: String): (View) -> View? = { root ->
         // PreferenceFragmentCompat uses a RecyclerView with this id.
         val rv = root.findViewById<RecyclerView>(androidx.preference.R.id.recycler_view)
             ?: findFirstRecyclerView(root)
-            ?: return@preferenceByTitle null
+        if (rv == null) return@preferenceByTitle null
         // Try visible children first.
         for (i in 0 until rv.childCount) {
             val child = rv.getChildAt(i)
