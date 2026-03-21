@@ -2,6 +2,7 @@ package com.haidianfirstteam.nostalgiaai.ui.music
 
 import android.app.DownloadManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Environment
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
@@ -24,10 +25,26 @@ object MusicDownloader {
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setAllowedOverRoaming(false)
 
-        try {
-            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+        // Android 4.4 can throw SecurityException if WRITE_EXTERNAL_STORAGE is not granted.
+        // Prefer public Downloads when permitted; otherwise fall back to app-scoped external dir.
+        val canWritePublic = try {
+            context.checkCallingOrSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         } catch (_: Throwable) {
-            // ignore
+            false
+        }
+        if (canWritePublic) {
+            try {
+                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+            } catch (_: Throwable) {
+                // fallback below
+            }
+        }
+        if (!canWritePublic) {
+            try {
+                req.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
+            } catch (_: Throwable) {
+                // ignore
+            }
         }
         val id = dm.enqueue(req)
         return Enqueued(downloadId = id, fileName = fileName)

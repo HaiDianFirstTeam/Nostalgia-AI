@@ -235,11 +235,11 @@ object MarkwonFactory {
                 .replace('｝', '}')
         }
 
-        // Inline math: convert $...$ to \( ... \)
-        // Reason: in practice, $...$ is the most common LLM output, but not all parsers
-        // reliably handle dollar-delimited inline math. \( \) is consistently supported.
+        // Inline math: normalize spacing in $...$ and keep dollar delimiters.
         // Only single-dollar pairs are handled here (not $$ blocks).
-        val inlineDollarAny = Regex("(?<!\\$)\\$([^$\\n]+?)\\$(?!\\$)")
+        val inlineDollarLoose = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\s+\\$(?!\\$)")
+        val inlineDollarTrimLeft = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\$(?!\\$)")
+        val inlineDollarTrimRight = Regex("(?<!\\$)\\$([^$\\n]+?)\\s+\\$(?!\\$)")
 
         val out = ArrayList<String>(body.size + 16)
         var i = 0
@@ -331,15 +331,19 @@ object MarkwonFactory {
                 s = s.replace('＄', '$')
             }
 
-            // Inline math: $...$ -> \( ... \)
+            // Inline math: normalize $ ... $ spacing -> $...$
             if (s.indexOf('$') >= 0) {
-                s = inlineDollarAny.replace(s) { m0 ->
+                s = inlineDollarLoose.replace(s) { m0 ->
                     val inner = normalizeLatex(m0.groupValues[1].trim())
-                    if (looksLikeMath(inner) || inner.any { it.isDigit() }) {
-                        "\\(${inner}\\)"
-                    } else {
-                        m0.value
-                    }
+                    "\$${inner}\$"
+                }
+                s = inlineDollarTrimLeft.replace(s) { m0 ->
+                    val inner = normalizeLatex(m0.groupValues[1].trim())
+                    "\$${inner}\$"
+                }
+                s = inlineDollarTrimRight.replace(s) { m0 ->
+                    val inner = normalizeLatex(m0.groupValues[1].trim())
+                    "\$${inner}\$"
                 }
             }
 

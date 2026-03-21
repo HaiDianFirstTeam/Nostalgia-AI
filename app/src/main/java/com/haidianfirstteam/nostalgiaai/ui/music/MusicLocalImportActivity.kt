@@ -586,6 +586,20 @@ class MusicLocalImportActivity : BaseActivity() {
                 val t = ui.item.track
                 b.tvTitle.text = t.name
 
+                // Android 4.4 StaticLayout ellipsize crash workaround
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
+                    try {
+                        b.tvTitle.ellipsize = null
+                        b.tvStatus.ellipsize = null
+                        b.tvTitle.maxLines = 2
+                        b.tvStatus.maxLines = 2
+                        b.tvTitle.setSingleLine(false)
+                        b.tvStatus.setSingleLine(false)
+                    } catch (_: Throwable) {
+                        // ignore
+                    }
+                }
+
                 val snap = ui.snapshot
                 if (snap == null) {
                     b.tvStatus.text = "未知状态"
