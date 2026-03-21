@@ -44,14 +44,21 @@ object TutorialFinders {
         // PreferenceFragmentCompat uses a RecyclerView with this id.
         val rv = root.findViewById<RecyclerView>(androidx.preference.R.id.recycler_view)
             ?: findFirstRecyclerView(root)
-        if (rv == null) return@preferenceByTitle null
-        // Try visible children first.
-        for (i in 0 until rv.childCount) {
-            val child = rv.getChildAt(i)
-            val tv = findTextViewWithText(child, titleText)
-            if (tv != null) return@preferenceByTitle child
+        if (rv == null) {
+            null
+        } else {
+            // Try visible children first.
+            var found: View? = null
+            for (i in 0 until rv.childCount) {
+                val child = rv.getChildAt(i)
+                val tv = findTextViewWithText(child, titleText)
+                if (tv != null) {
+                    found = child
+                    break
+                }
+            }
+            found
         }
-        null
     }
 
     private fun findFirstRecyclerView(root: View): RecyclerView? {
