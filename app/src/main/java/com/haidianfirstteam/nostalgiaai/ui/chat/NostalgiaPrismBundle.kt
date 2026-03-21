@@ -1,6 +1,6 @@
 package com.haidianfirstteam.nostalgiaai.ui.chat
 
-import io.noties.prism4j.bundler.PrismBundle
+import io.noties.prism4j.annotations.PrismBundle
 
 /**
  * Generates a Prism4j GrammarLocator for syntax highlighting.
@@ -8,7 +8,7 @@ import io.noties.prism4j.bundler.PrismBundle
  * NOTE: This class is only used by the prism4j-bundler annotation processor.
  */
 @PrismBundle(
-    includes = [
+    include = [
         // core
         "clike",
         // common languages
