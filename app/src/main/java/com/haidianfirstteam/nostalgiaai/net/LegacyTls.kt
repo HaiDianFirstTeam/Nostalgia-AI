@@ -7,6 +7,9 @@ import okhttp3.OkHttpClient
 import okhttp3.TlsVersion
 import java.security.KeyStore
 import java.security.Security
+import java.security.cert.CertificateException
+import java.security.cert.CertificateFactory
+import java.io.ByteArrayInputStream
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
@@ -33,8 +36,17 @@ object LegacyTls {
             val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
             trustManagerFactory.init(null as KeyStore?)
             val trustManagers = trustManagerFactory.trustManagers
-            val trustManager = trustManagers.firstOrNull { it is X509TrustManager } as? X509TrustManager
+            val systemTrustManager = trustManagers.firstOrNull { it is X509TrustManager } as? X509TrustManager
                 ?: return builder
+
+            // Some modern endpoints (or misconfigured servers) can fail on API 19 with:
+            // CertPathValidatorException: Trust anchor for certification path not found
+            // because the system root store is outdated. Keep system trust as primary,
+            // but add a small set of widely-used public roots as fallback.
+            val extraTrustManager = buildExtraTrustManagerOrNull()
+            val trustManager = if (extraTrustManager != null) {
+                CompositeX509TrustManager(systemTrustManager, extraTrustManager)
+            } else systemTrustManager
 
             // Force using Conscrypt SSLContext when available.
             val sslContext = if (conscryptProvider != null) {
@@ -87,6 +99,51 @@ object LegacyTls {
             // ignore; fallback to default
         }
         return builder
+    }
+
+    private fun buildExtraTrustManagerOrNull(): X509TrustManager? {
+        return try {
+            val cf = CertificateFactory.getInstance("X.509")
+            val ks = KeyStore.getInstance(KeyStore.getDefaultType())
+            ks.load(null, null)
+
+            var i = 0
+            for (pem in ExtraTrustAnchors.ALL_PEMS) {
+                val cert = cf.generateCertificate(ByteArrayInputStream(pem.toByteArray(Charsets.US_ASCII)))
+                ks.setCertificateEntry("extra_$i", cert)
+                i++
+            }
+            val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            tmf.init(ks)
+            tmf.trustManagers.firstOrNull { it is X509TrustManager } as? X509TrustManager
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private class CompositeX509TrustManager(
+        private val primary: X509TrustManager,
+        private val fallback: X509TrustManager
+    ) : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {
+            primary.checkClientTrusted(chain, authType)
+        }
+
+        override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {
+            try {
+                primary.checkServerTrusted(chain, authType)
+            } catch (e: CertificateException) {
+                // If system validation fails on legacy devices, try the bundled extra roots.
+                fallback.checkServerTrusted(chain, authType)
+            }
+        }
+
+        override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> {
+            val a = primary.acceptedIssuers
+            val b = fallback.acceptedIssuers
+            return (a.asList() + b.asList()).distinctBy { it.subjectX500Principal.name + "/" + it.serialNumber.toString(16) }
+                .toTypedArray()
+        }
     }
 
     private fun ensureConscryptInstalled(): java.security.Provider? {

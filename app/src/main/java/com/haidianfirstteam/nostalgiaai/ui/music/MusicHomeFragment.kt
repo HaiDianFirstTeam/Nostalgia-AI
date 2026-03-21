@@ -377,7 +377,12 @@ class MusicHomeFragment : Fragment() {
         if (keyword.isBlank()) return
 
         b.historyPanel.visibility = View.GONE
+        // On some legacy devices, clearFocus() might not trigger onFocusChange reliably
+        // (e.g. when no other focusable view takes focus), which can leave rvTracks hidden.
+        // Make the UI state explicit before launching the search.
+        b.rvTracks.visibility = View.VISIBLE
         b.etSearch.clearFocus()
+        b.root.requestFocus()
 
         lifecycleScope.launch {
             b.progress.visibility = View.VISIBLE
