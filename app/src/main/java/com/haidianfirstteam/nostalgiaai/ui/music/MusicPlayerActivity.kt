@@ -89,7 +89,6 @@ class MusicPlayerActivity : BaseActivity() {
 
         binding.btnPlayPause.setOnClickListener { MusicPlayerManager.togglePause() }
         binding.btnQueue.setOnClickListener { MusicQueueSheet.show(this) }
-        binding.btnLyrics.setOnClickListener { startActivity(MusicLyricsActivity.newIntent(this)) }
 
         // Inline lyrics: tapping cover toggles cover <-> lyrics scroll.
         setupInlineLyricsUi()

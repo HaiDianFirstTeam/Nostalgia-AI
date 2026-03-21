@@ -30,7 +30,6 @@ object TutorialRegistry {
                 // Close drawer before spotlighting chat.
                 TutorialStep(R.id.btnTarget, "模型/组", prepare = { a -> (a as? MainActivity)?.closeDrawerForTutorial() }),
                 TutorialStep(R.id.btnWebSearch, "联网"),
-                TutorialStep(R.id.rvMessages, "消息列表"),
                 TutorialStep(R.id.btnUpload, "上传"),
                 TutorialStep(R.id.btnCamera, "相机"),
                 TutorialStep(R.id.btnSend, "发送/停止"),
@@ -47,11 +46,8 @@ object TutorialRegistry {
             )
 
             is ToolboxActivity -> "toolbox" to listOf(
-                TutorialStep(R.id.toolbar, "返回"),
-                TutorialStep(R.id.recycler, "功能列表"),
                 TutorialStep(text = "音乐解析", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
-                TutorialStep(text = "本地导入", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 1)),
-                TutorialStep(text = "翻译助手", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 2)),
+                TutorialStep(text = "翻译助手", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 1)),
             )
 
             is MusicActivity -> "music" to listOf(
@@ -60,19 +56,13 @@ object TutorialRegistry {
 
                 // Home tab controls
                 TutorialStep(R.id.btnSearch, "搜索按钮"),
-                TutorialStep(R.id.historyPanel, "搜索历史"),
                 TutorialStep(R.id.btnClearHistory, "清空历史"),
-                TutorialStep(R.id.rvHistory, "历史列表"),
                 TutorialStep(text = "历史-删除", finder = TutorialFinders.recyclerChildViewById(R.id.rvHistory, 0, R.id.btnDelete)),
-                TutorialStep(R.id.rvTracks, "结果列表"),
                 TutorialStep(text = "结果-播放", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnPlay)),
                 TutorialStep(text = "结果-下载", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnDownload)),
                 TutorialStep(text = "结果-更多", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnMore)),
 
                 // Player bar
-                TutorialStep(R.id.playerBar, "播放条"),
-                TutorialStep(R.id.imgCover, "封面"),
-                TutorialStep(R.id.tvNowPlaying, "正在播放"),
                 TutorialStep(R.id.btnPlayPause, "播放/暂停"),
                 TutorialStep(R.id.btnQueue, "队列"),
             )
@@ -93,18 +83,16 @@ object TutorialRegistry {
                 TutorialStep(R.id.btnPlayPause, "播放/暂停"),
                 TutorialStep(R.id.btnNext, "下一首"),
                 TutorialStep(R.id.btnQueue, "队列"),
-                TutorialStep(R.id.btnLyrics, "全屏歌词"),
             )
 
             is MusicLyricsActivity -> "music_lyrics" to listOf(
-                TutorialStep(R.id.rvLyrics, "点击歌词可跳转"),
+                TutorialStep(R.id.rvLyrics, "点击歌词跳转"),
             )
 
             is MusicLocalImportActivity -> "music_local" to listOf(
-                TutorialStep(R.id.recycler, "本地列表"),
                 TutorialStep(text = "长按进入多选", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
                 TutorialStep(R.id.fab, "导入"),
-                TutorialStep(text = "多选后可删除/加入歌单/加入队列"),
+                TutorialStep(text = "多选：删/歌单/队列"),
             )
 
             is TranslateActivity -> "translate" to listOf(
@@ -112,7 +100,7 @@ object TutorialRegistry {
                 TutorialStep(R.id.btnSwap, "交换"),
                 TutorialStep(R.id.btnLangB, "语言B"),
                 TutorialStep(R.id.btnSettings, "设置"),
-                TutorialStep(R.id.rvChat, "下拉出历史"),
+                TutorialStep(R.id.rvChat, "下拉历史"),
                 TutorialStep(R.id.btnSend, "发送"),
                 TutorialStep(text = "记忆：开=多轮"),
                 TutorialStep(text = "记忆：带上下文"),
@@ -121,7 +109,7 @@ object TutorialRegistry {
             )
 
             is TranslateModelPickerActivity -> "translate_model" to listOf(
-                TutorialStep(R.id.recycler, "模型列表"),
+                // Button-only: keep example item as actionable tap
                 TutorialStep(text = "点一条选择", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
             )
 
@@ -132,60 +120,44 @@ object TutorialRegistry {
             // Generic list+fab screens: cover every visible control
             // Model/Tavily settings: show once only (shared keys)
             is ProvidersActivity -> "models_settings_once" to listOf(
-                TutorialStep(R.id.recycler, "列表"),
                 TutorialStep(text = "点一条编辑", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
                 TutorialStep(R.id.fab, "新增")
             )
             is ProviderDetailActivity -> "models_settings_once" to listOf(
-                TutorialStep(R.id.recycler, "配置项"),
                 TutorialStep(text = "点一项编辑", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
             )
             is ModelsActivity -> "models_settings_once" to listOf(
-                TutorialStep(R.id.recycler, "模型列表"),
                 TutorialStep(text = "点一条编辑", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
                 TutorialStep(R.id.fab, "新增")
             )
             is ModelGroupsActivity -> "models_settings_once" to listOf(
-                TutorialStep(R.id.recycler, "模型组列表"),
                 TutorialStep(text = "点一条详情", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
                 TutorialStep(R.id.fab, "新建")
             )
             is ModelGroupDetailActivity -> "models_settings_once" to listOf(
-                TutorialStep(R.id.recycler, "组详情"),
                 TutorialStep(text = "点一项编辑", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
             )
             is TavilyActivity -> "tavily_settings_once" to listOf(
-                TutorialStep(R.id.recycler, "配置列表"),
                 TutorialStep(text = "点一项编辑", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
             )
             is ImportExportActivity -> "import_export" to listOf(
-                TutorialStep(R.id.recycler, "操作列表"),
                 TutorialStep(text = "点一项执行", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
             )
             is AboutActivity -> null
 
             // Music management screens
-            is com.haidianfirstteam.nostalgiaai.ui.music.MusicSettingsActivity -> "music_settings" to listOf(
-                TutorialStep(R.id.toolbar, "返回"),
-                TutorialStep(R.id.recycler, "音质设置")
-            )
+            is com.haidianfirstteam.nostalgiaai.ui.music.MusicSettingsActivity -> null
             is com.haidianfirstteam.nostalgiaai.ui.music.MusicPlaylistsActivity -> "music_playlists" to listOf(
-                TutorialStep(R.id.toolbar, "返回"),
-                TutorialStep(R.id.recycler, "歌单列表"),
                 TutorialStep(text = "点一条进入", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
                 TutorialStep(R.id.fab, "新建")
             )
             is com.haidianfirstteam.nostalgiaai.ui.music.MusicPlaylistDetailActivity -> "music_playlist_detail" to listOf(
-                TutorialStep(R.id.toolbar, "返回"),
-                TutorialStep(R.id.recycler, "歌曲列表"),
                 TutorialStep(text = "歌曲-播放", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnPlay)),
                 TutorialStep(text = "歌曲-下载", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnDownload)),
                 TutorialStep(text = "歌曲-更多", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnMore)),
                 TutorialStep(R.id.fab, "操作")
             )
             is com.haidianfirstteam.nostalgiaai.ui.music.MusicPlayHistoryActivity -> "music_play_history" to listOf(
-                TutorialStep(R.id.toolbar, "返回"),
-                TutorialStep(R.id.recycler, "历史列表"),
                 TutorialStep(text = "历史-删除", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnDelete)),
                 TutorialStep(R.id.fab, "清空")
             )
