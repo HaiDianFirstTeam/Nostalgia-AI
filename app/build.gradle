@@ -106,8 +106,9 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
 
     // ExoPlayer (supports playback speed on API 19+)
-    implementation 'com.google.android.exoplayer:exoplayer-core:2.19.1'
-    implementation 'com.google.android.exoplayer:extension-okhttp:2.19.1'
+    // NOTE: OkHttp extension requires minSdk 21 from ExoPlayer 2.15+. Keep 2.14.2 for API 19.
+    implementation 'com.google.android.exoplayer:exoplayer-core:2.14.2'
+    implementation 'com.google.android.exoplayer:extension-okhttp:2.14.2'
 
     implementation 'androidx.preference:preference-ktx:1.2.1'
     implementation 'androidx.activity:activity-ktx:1.8.2'

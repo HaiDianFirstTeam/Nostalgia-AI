@@ -65,6 +65,14 @@ class MainActivity : BaseActivity() {
         binding.btnSettings.setOnClickListener { startActivity(android.content.Intent(this, SettingsActivity::class.java)) }
         binding.btnToolbox.setOnClickListener { startActivity(android.content.Intent(this, ToolboxActivity::class.java)) }
 
+        // If user chose "replay tutorial" from Settings, ensure main tutorial shows.
+        if (intent?.getBooleanExtra("force_tutorial", false) == true) {
+            try {
+                com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialPrefs(this).resetAll()
+            } catch (_: Throwable) {
+            }
+        }
+
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.content, ChatFragment.newInstance())

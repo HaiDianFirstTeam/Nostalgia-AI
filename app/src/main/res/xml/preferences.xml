@@ -52,6 +52,11 @@
             android:title="导入 / 导出（JSON）" />
 
         <Preference
+            android:key="replay_tutorial"
+            android:title="重新体验教程"
+            android:summary="重新显示各页面的聚光灯引导" />
+
+        <Preference
             android:key="about"
             android:title="关于" />
     </PreferenceCategory>

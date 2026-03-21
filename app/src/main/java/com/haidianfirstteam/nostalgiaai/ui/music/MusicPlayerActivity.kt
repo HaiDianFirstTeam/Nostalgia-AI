@@ -171,6 +171,7 @@ class MusicPlayerActivity : BaseActivity() {
         tv1.text = "倍速"
 
         val seek = SeekBar(ctx)
+        seek.id = android.R.id.progress
         // 0..49 => 0.1..5.0 step 0.1
         seek.max = 49
         val cur = MusicPlayerManager.getSpeed().coerceIn(0.1f, 5.0f)
@@ -199,7 +200,7 @@ class MusicPlayerActivity : BaseActivity() {
             addView(seek)
         }
 
-        MaterialAlertDialogBuilder(ctx)
+        val dlg = MaterialAlertDialogBuilder(ctx)
             .setTitle("倍速")
             .setView(wrap)
             .setPositiveButton("确定") { _, _ ->
@@ -211,7 +212,20 @@ class MusicPlayerActivity : BaseActivity() {
                 }
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                "music_player_speed_dialog",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.progress, "滑动调倍速"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button1, "确定"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "取消"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     private fun setupInlineLyricsUi() {
@@ -320,7 +334,7 @@ class MusicPlayerActivity : BaseActivity() {
 
     private fun showModeDialog() {
         val items = arrayOf("顺序", "随机", "单曲循环")
-        MaterialAlertDialogBuilder(this)
+        val dlg = MaterialAlertDialogBuilder(this)
             .setTitle("播放模式")
             .setItems(items) { _, which ->
                 val mode = when (which) {
@@ -331,7 +345,19 @@ class MusicPlayerActivity : BaseActivity() {
                 MusicPlayerManager.setMode(mode)
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                "music_player_mode_dialog",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.list, "模式列表：点击任意一项即可切换播放模式。"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "取消：关闭不修改。"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     override fun onResume() {

@@ -5,6 +5,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController
+import com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep
 
 class MusicMeFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -20,6 +22,17 @@ class MusicMeFragment : Fragment() {
         root.findViewById<android.view.View>(com.haidianfirstteam.nostalgiaai.R.id.btnMusicSettings).setOnClickListener {
             startActivity(MusicSettingsActivity.newIntent(ctx))
         }
+
+        // Spotlight tutorial for "My" tab (first time only)
+        TutorialController.maybeShow(
+            requireActivity(),
+            "music_me",
+            listOf(
+                TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicHistory, "历史记录：查看最近播放的歌曲。"),
+                TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicPlaylists, "歌单：管理本地歌单与歌曲。"),
+                TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicSettings, "设置：配置音质等选项。"),
+            )
+        )
         return root
     }
 

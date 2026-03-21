@@ -3,6 +3,8 @@ package com.haidianfirstteam.nostalgiaai.ui
 import android.content.Context
 import androidx.appcompat.app.AppCompatActivity
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
+import com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController
+import com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialRegistry
 import com.haidianfirstteam.nostalgiaai.util.FontScale
 
 /**
@@ -33,6 +35,16 @@ open class BaseActivity : AppCompatActivity() {
             }
         } catch (_: Throwable) {
             // no-op
+        }
+
+        // Page-level spotlight tutorial (first time only)
+        try {
+            val spec = TutorialRegistry.stepsFor(this)
+            if (spec != null) {
+                val (key, steps) = spec
+                TutorialController.maybeShow(this, key, steps)
+            }
+        } catch (_: Throwable) {
         }
     }
 }

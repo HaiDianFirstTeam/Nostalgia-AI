@@ -89,6 +89,27 @@ object MusicQueueSheet {
         })
         helper.attachToRecyclerView(b.rvQueue)
 
+        dialog.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dialog,
+                "music_queue_sheet",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(
+                        com.haidianfirstteam.nostalgiaai.R.id.rvQueue,
+                        "队列：点歌切换/长按拖动排序"
+                    ),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(
+                        text = "移除按钮（示例：第一条右侧）。点击可从队列移除。",
+                        finder = com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialFinders.recyclerChildViewById(
+                            com.haidianfirstteam.nostalgiaai.R.id.rvQueue,
+                            0,
+                            com.haidianfirstteam.nostalgiaai.R.id.btnRemove
+                        )
+                    )
+                )
+            )
+        }
+
         dialog.show()
     }
 }

@@ -215,7 +215,7 @@ class MusicHomeFragment : Fragment() {
     private fun pickApi1StreamQualityThenPlay(t: MusicTrack, cur: com.haidianfirstteam.nostalgiaai.ui.music.data.MusicSettings) {
         val ctx = requireContext()
         val items = arrayOf("128", "192", "320", "740", "999")
-        MaterialAlertDialogBuilder(ctx)
+        val dlg = MaterialAlertDialogBuilder(ctx)
             .setTitle("首次播放：选择默认音质")
             .setItems(items) { _, which ->
                 val br = items[which].toInt()
@@ -227,7 +227,19 @@ class MusicHomeFragment : Fragment() {
                 }
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                "music_first_play_quality",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.list, "音质列表：选择一个默认音质（以后可在设置中修改）。"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "取消：暂不播放。"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     private fun downloadTrack(t: MusicTrack) {
@@ -266,7 +278,7 @@ class MusicHomeFragment : Fragment() {
     private fun pickApi1DownloadQualityFirstTime(t: MusicTrack, cur: com.haidianfirstteam.nostalgiaai.ui.music.data.MusicSettings) {
         val ctx = requireContext()
         val items = arrayOf("128", "192", "320", "740", "999")
-        MaterialAlertDialogBuilder(ctx)
+        val dlg = MaterialAlertDialogBuilder(ctx)
             .setTitle("首次下载：选择默认音质")
             .setItems(items) { _, which ->
                 val br = items[which].toInt()
@@ -278,7 +290,19 @@ class MusicHomeFragment : Fragment() {
                 }
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                "music_first_download_quality",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.list, "音质列表：选择一个默认下载音质（以后可在设置中修改）。"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "取消：暂不下载。"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     private fun showDownloadDialog(t: MusicTrack) {

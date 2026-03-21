@@ -184,7 +184,7 @@ class TranslateActivity : BaseActivity() {
         val labels = arrayOf("自动检测", "中文", "英语", "日语", "韩语", "法语", "德语", "西班牙语", "俄语", "自定义...")
         val cur = if (isA) settings.langA else settings.langB
         val checked = langs.indexOf(cur).takeIf { it >= 0 } ?: 0
-        MaterialAlertDialogBuilder(this)
+        val dlg = MaterialAlertDialogBuilder(this)
             .setTitle(if (isA) "选择语言A" else "选择语言B")
             .setSingleChoiceItems(labels, checked) { d, which ->
                 if (langs[which] == "__custom__") {
@@ -198,14 +198,27 @@ class TranslateActivity : BaseActivity() {
                 }
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                if (isA) "translate_pick_lang_a" else "translate_pick_lang_b",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.list, "语言列表"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "取消"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     private fun showCustomLanguageDialog(isA: Boolean) {
         val input = android.widget.EditText(this)
+        input.id = android.R.id.edit
         input.hint = "例如：粤语 / 文言文 / 简体中文 / English-UK"
         input.setText(if (isA) settings.langA else settings.langB)
-        MaterialAlertDialogBuilder(this)
+        val dlg = MaterialAlertDialogBuilder(this)
             .setTitle(if (isA) "自定义语言A" else "自定义语言B")
             .setView(input)
             .setPositiveButton("保存") { _, _ ->
@@ -217,7 +230,20 @@ class TranslateActivity : BaseActivity() {
                 }
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                if (isA) "translate_custom_lang_a" else "translate_custom_lang_b",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.edit, "输入语言"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button1, "保存"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "取消"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     private fun showSettingsDialog() {
@@ -229,7 +255,7 @@ class TranslateActivity : BaseActivity() {
             "身份设定",
             "选择模型"
         )
-        MaterialAlertDialogBuilder(this)
+        val dlg = MaterialAlertDialogBuilder(this)
             .setTitle("翻译设置")
             .setItems(items) { _, which ->
                 when (which) {
@@ -245,7 +271,19 @@ class TranslateActivity : BaseActivity() {
                 applyMemoryModeUi()
             }
             .setNegativeButton("关闭", null)
-            .show()
+            .create()
+
+        dlg.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dlg,
+                "translate_settings_dialog",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.list, "设置列表"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(android.R.id.button2, "关闭"),
+                )
+            )
+        }
+        dlg.show()
     }
 
     private fun installPullDownToHistoryGesture() {
@@ -451,6 +489,25 @@ class TranslateActivity : BaseActivity() {
                 }
                 .setNegativeButton("取消", null)
                 .show()
+        }
+
+        dialog.setOnShowListener {
+            com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialController.maybeShowDialog(
+                dialog,
+                "translate_history_sheet",
+                listOf(
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.rvTranslateHistory, "历史卡片墙"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnClearTranslateHistory, "清空"),
+                    com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialStep(text = "删除单条（示例：第一张卡片上的删除按钮）。", finder = { root ->
+                        // item_translate_history_card has btnDelete; take first visible child.
+                        com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialFinders.recyclerChildViewById(
+                            com.haidianfirstteam.nostalgiaai.R.id.rvTranslateHistory,
+                            0,
+                            com.haidianfirstteam.nostalgiaai.R.id.btnDelete
+                        ).invoke(root)
+                    }),
+                )
+            )
         }
 
         dialog.show()

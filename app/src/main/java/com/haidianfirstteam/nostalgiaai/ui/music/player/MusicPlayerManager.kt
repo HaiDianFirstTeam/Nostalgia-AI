@@ -3,14 +3,14 @@ package com.haidianfirstteam.nostalgiaai.ui.music.player
 import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.google.android.exoplayer2.ExoPlayer
-import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.PlaybackParameters
 import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.ExoPlaybackException
 import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
-import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
-import com.google.android.exoplayer2.upstream.DefaultDataSource
+import com.google.android.exoplayer2.source.ProgressiveMediaSource
+import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
+import com.google.android.exoplayer2.SimpleExoPlayer
 import com.haidianfirstteam.nostalgiaai.net.HttpClients
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicPlayMode
@@ -25,7 +25,7 @@ data class NowPlaying(
 
 object MusicPlayerManager {
 
-    private var player: ExoPlayer? = null
+    private var player: SimpleExoPlayer? = null
     private var queue: MutableList<MusicTrack> = mutableListOf()
     private var index: Int = -1
     private var mode: MusicPlayMode = MusicPlayMode.ORDER
@@ -203,14 +203,9 @@ object MusicPlayerManager {
 
         val appCtx = context.applicationContext
         // IMPORTANT: Use OkHttp data source to ensure Conscrypt-enabled TLS works on API 19.
-        val httpFactory = OkHttpDataSource.Factory(HttpClients.music())
-            .setUserAgent("Nostalgia-AI")
-        val dataSourceFactory = DefaultDataSource.Factory(appCtx, httpFactory)
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-
-        val p = ExoPlayer.Builder(appCtx)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build()
+        val httpFactory = OkHttpDataSource.Factory(HttpClients.music()).setUserAgent("Nostalgia-AI")
+        val dataSourceFactory = DefaultDataSourceFactory(appCtx, httpFactory)
+        val p = SimpleExoPlayer.Builder(appCtx).build()
 
         p.setAudioAttributes(
             AudioAttributes.Builder()
@@ -221,28 +216,28 @@ object MusicPlayerManager {
         )
         p.setHandleAudioBecomingNoisy(true)
 
-        p.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
+        p.addListener(object : Player.EventListener {
+            override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> post(track = track, playing = p.isPlaying)
+                    Player.STATE_READY -> post(track = track, playing = p.playWhenReady)
                     Player.STATE_ENDED -> {
                         post(track = track, playing = false)
                         onComplete(appCtx)
                     }
+                    else -> {
+                        post(track = track, playing = p.playWhenReady)
+                    }
                 }
             }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                post(track = track, playing = isPlaying)
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
+            override fun onPlayerError(error: ExoPlaybackException) {
                 post(track = track, playing = false)
             }
         })
 
-        p.setMediaItem(com.google.android.exoplayer2.MediaItem.fromUri(url))
-        p.prepare()
+        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(android.net.Uri.parse(url))
+        p.prepare(mediaSource)
         try {
             p.playbackParameters = PlaybackParameters(speed)
         } catch (_: Throwable) {

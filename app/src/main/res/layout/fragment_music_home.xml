@@ -84,7 +84,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="清空"
-                android:visibility="gone" />
+                android:visibility="visible" />
         </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView

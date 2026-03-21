@@ -224,6 +224,7 @@ class ChatFragment : Fragment() {
             }
             chatVm.loadConversation(id)
         }
+
     }
 
     override fun onStop() {

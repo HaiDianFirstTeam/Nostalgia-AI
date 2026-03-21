@@ -10,6 +10,8 @@ import androidx.preference.SeekBarPreference
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.R
 import com.haidianfirstteam.nostalgiaai.data.SettingsRepository
+import com.haidianfirstteam.nostalgiaai.ui.MainActivity
+import com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,6 +52,17 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
         findPreference<Preference>("about")?.setOnPreferenceClickListener {
             startActivity(AboutActivity.newIntent(requireContext()))
+            true
+        }
+
+        findPreference<Preference>("replay_tutorial")?.setOnPreferenceClickListener {
+            // Reset tutorial flags, then go back to main screen and start tutorial.
+            TutorialPrefs(requireContext()).resetAll()
+            val i = android.content.Intent(requireContext(), MainActivity::class.java)
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            i.putExtra("force_tutorial", true)
+            startActivity(i)
+            requireActivity().finish()
             true
         }
 
