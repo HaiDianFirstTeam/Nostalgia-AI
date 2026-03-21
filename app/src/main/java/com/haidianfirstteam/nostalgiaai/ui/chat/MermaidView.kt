@@ -52,6 +52,8 @@ class MermaidView @JvmOverloads constructor(
         val s = webView.settings
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
+        s.allowFileAccess = true
+        s.allowContentAccess = true
         s.loadWithOverviewMode = true
         s.useWideViewPort = true
 
@@ -106,6 +108,11 @@ class MermaidView @JvmOverloads constructor(
               <div id="wrap"></div>
               <script>
                 (function(){
+                  if (typeof mermaid === 'undefined') {
+                    document.getElementById('wrap').innerHTML = '<div class="err">Mermaid 脚本未加载（mermaid is not defined）\n请确认 assets/mermaid/mermaid.min.js 已打包进 APK</div>';
+                    try { Android.onHeight(document.documentElement.scrollHeight || document.body.scrollHeight || 1); } catch(_e) {}
+                    return;
+                  }
                   try {
                     mermaid.initialize({ startOnLoad: false, theme: "$theme", securityLevel: 'strict' });
                   } catch (e) {

@@ -209,6 +209,9 @@ object MarkwonFactory {
 
         // Inline math: convert $...$ -> $$...$$ (only when it looks like a formula)
         val inlineDollar = Regex("(?<!\\$)\\$(?!\\$)([^\\n$]+)\\$(?!\\$)")
+        // LaTeX bracket forms: \( ... \) and \[ ... \]
+        val latexInlineParen = Regex("\\\\\\((.+?)\\\\\\)")
+        val latexDisplayBracket = Regex("\\\\\\[(.+?)\\\\\\]")
         fun looksLikeMath(s: String): Boolean {
             val t = s.trim()
             if (t.isEmpty()) return false
@@ -285,6 +288,18 @@ object MarkwonFactory {
             // Inline math
             if (s.indexOf('$') >= 0) {
                 s = inlineDollar.replace(s) { m0 ->
+                    val inner = m0.groupValues[1]
+                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
+                }
+            }
+
+            // LaTeX bracket forms
+            if (s.indexOf('\\') >= 0) {
+                s = latexInlineParen.replace(s) { m0 ->
+                    val inner = m0.groupValues[1]
+                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
+                }
+                s = latexDisplayBracket.replace(s) { m0 ->
                     val inner = m0.groupValues[1]
                     if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
                 }

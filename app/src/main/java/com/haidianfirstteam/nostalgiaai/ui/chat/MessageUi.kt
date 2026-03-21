@@ -4,6 +4,7 @@ data class MessageUi(
     val id: Long,
     val role: String,
     val content: String,
+    val thinking: String = "",
     val createdAt: Long,
     val webLinks: List<WebLinkUi> = emptyList(),
 

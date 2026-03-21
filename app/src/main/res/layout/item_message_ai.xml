@@ -43,6 +43,50 @@
 			app:tint="?attr/colorControlNormal" />
 	</LinearLayout>
 
+	<LinearLayout
+		android:id="@+id/thinkingBar"
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:layout_marginTop="2dp"
+		android:orientation="vertical"
+		android:visibility="gone">
+
+		<LinearLayout
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:orientation="horizontal"
+			android:gravity="center_vertical">
+
+			<androidx.appcompat.widget.AppCompatImageButton
+				android:id="@+id/btnThinkingToggle"
+				android:layout_width="32dp"
+				android:layout_height="32dp"
+				android:background="@android:color/transparent"
+				android:contentDescription="展开/折叠思考"
+				app:srcCompat="@android:drawable/arrow_down_float"
+				app:tint="?attr/colorControlNormal" />
+
+			<TextView
+				android:id="@+id/tvThinkingTitle"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:alpha="0.75"
+				android:text="思考过程"
+				android:textSize="12sp" />
+		</LinearLayout>
+
+		<TextView
+			android:id="@+id/tvThinking"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:layout_marginTop="2dp"
+			android:visibility="gone"
+			android:textSize="12sp"
+			android:alpha="0.9"
+			android:background="@android:color/transparent"
+			android:textColor="?android:attr/textColorSecondary" />
+	</LinearLayout>
+
 	<TextView
 		android:id="@+id/tvContent"
 		android:layout_width="wrap_content"

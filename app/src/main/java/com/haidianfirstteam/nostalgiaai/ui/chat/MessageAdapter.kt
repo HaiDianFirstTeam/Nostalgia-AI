@@ -32,6 +32,9 @@ class MessageAdapter(
 
     private val items = ArrayList<MessageUi>()
 
+    private val thinkingExpanded = HashMap<Long, Boolean>()
+    private val lastMarkdownRenderAt = HashMap<Long, Long>()
+
     // When streaming, rendering markdown on every tiny update can cause heavy relayout/jitter.
     // We render plain text for the current streaming assistant bubble, and apply markdown after done.
     private var streamingMessageId: Long? = null
@@ -246,6 +249,23 @@ class MessageAdapter(
             val mermaids = parsed.diagrams
             renderMermaids(b, mermaids)
 
+            // Thinking panel
+            if (item.thinking.isNotBlank()) {
+                b.thinkingBar.visibility = View.VISIBLE
+                val expanded = thinkingExpanded[item.id] == true
+                b.tvThinking.text = item.thinking
+                b.tvThinking.visibility = if (expanded) View.VISIBLE else View.GONE
+                b.btnThinkingToggle.rotation = if (expanded) 180f else 0f
+                b.btnThinkingToggle.setOnClickListener {
+                    thinkingExpanded[item.id] = !(thinkingExpanded[item.id] == true)
+                    notifyItemChanged(bindingAdapterPosition)
+                }
+            } else {
+                b.thinkingBar.visibility = View.GONE
+                b.tvThinking.text = ""
+                b.tvThinking.visibility = View.GONE
+            }
+
             // Markdown render (mermaid blocks removed)
             val contentForMarkdown = parsed.text
             if (contentForMarkdown.isBlank()) {
@@ -256,8 +276,16 @@ class MessageAdapter(
                 b.tvContent.visibility = View.VISIBLE
                 val sid = streamingMessageId
                 if (sid != null && item.id == sid) {
-                    // Streaming bubble: use raw text to avoid heavy markdown parsing jitter.
-                    b.tvContent.text = contentForMarkdown
+                    // Streaming bubble: render markdown at a low frequency (1.5s) to reduce jitter.
+                    // In between, show raw text (fast).
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val last = lastMarkdownRenderAt[item.id] ?: 0L
+                    if (now - last >= 1500L) {
+                        lastMarkdownRenderAt[item.id] = now
+                        markwon.setMarkdown(b.tvContent, contentForMarkdown)
+                    } else {
+                        b.tvContent.text = contentForMarkdown
+                    }
                     // During streaming, do not render Mermaid WebViews (too heavy).
                     b.mermaidContainer.visibility = View.GONE
                     b.mermaidContainer.removeAllViews()

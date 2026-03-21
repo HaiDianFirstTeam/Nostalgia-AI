@@ -161,7 +161,9 @@ dependencies {
 // We keep mermaid.min.js out of git (large) and download it during build.
 // The downloaded file is bundled into APK as an asset and used by WebView.
 def mermaidVersion = "10.9.1"
-def mermaidUrl = "https://cdn.jsdelivr.net/npm/mermaid@${mermaidVersion}/dist/mermaid.min.js"
+// Use unpkg (more reliable from CI). It provides a UMD build that sets global `mermaid`.
+def mermaidUrlPrimary = "https://unpkg.com/mermaid@${mermaidVersion}/dist/mermaid.min.js"
+def mermaidUrlFallback = "https://cdnjs.cloudflare.com/ajax/libs/mermaid/${mermaidVersion}/mermaid.min.js"
 def mermaidAssetOut = file("$projectDir/src/main/assets/mermaid/mermaid.min.js")
 
 tasks.register("downloadMermaid") {
@@ -172,18 +174,42 @@ tasks.register("downloadMermaid") {
             return
         }
         mermaidAssetOut.parentFile.mkdirs()
-        println("Downloading mermaid.min.js from: ${mermaidUrl}")
-        new URL(mermaidUrl).withInputStream { ins ->
-            mermaidAssetOut.withOutputStream { out ->
-                out << ins
+
+        def tmp = file("$buildDir/tmp/mermaid.min.js")
+        tmp.parentFile.mkdirs()
+
+        def downloadFrom = { String url ->
+            println("Downloading mermaid.min.js from: ${url}")
+            new URL(url).withInputStream { ins ->
+                tmp.withOutputStream { out -> out << ins }
             }
+            if (!tmp.exists() || tmp.length() < 200_000) {
+                throw new GradleException("Downloaded mermaid.min.js is too small: ${tmp.length()} bytes")
+            }
+            // Ensure it is a UMD build that defines global `mermaid`
+            def head = tmp.getText('UTF-8').take(200)
+            if (!head.contains("mermaid") || !head.contains("JM.mermaid") && !head.contains(".mermaid")) {
+                // best-effort check; don't be overly strict
+                println("Warning: downloaded mermaid.min.js header did not match expected pattern")
+            }
+            mermaidAssetOut.bytes = tmp.bytes
+            println("Saved mermaid.min.js to: ${mermaidAssetOut} (${mermaidAssetOut.length()} bytes)")
         }
-        println("Saved mermaid.min.js to: ${mermaidAssetOut}")
+
+        try {
+            downloadFrom(mermaidUrlPrimary)
+        } catch (Throwable t) {
+            println("Primary mermaid download failed: ${t.message}")
+            downloadFrom(mermaidUrlFallback)
+        }
     }
 }
 
 // Ensure assets exist before build.
 preBuild.dependsOn(tasks.named("downloadMermaid"))
+tasks.matching { it.name == "preReleaseBuild" || it.name == "preDebugBuild" }.configureEach {
+    dependsOn(tasks.named("downloadMermaid"))
+}
 
 def computeVersionName() {
     def tag = System.getenv('GITHUB_REF_NAME')

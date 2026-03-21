@@ -260,6 +260,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         refreshMessages(conversationId)
 
         val sb = StringBuilder()
+        val thinkingSb = StringBuilder()
+        var lastThinkingUpdateAt = 0L
         var routedProviderId: Long? = null
         var routedApiKeyId: Long? = null
         var routedModelId: Long? = null
@@ -281,6 +283,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     webLinksUi = out0.webLinks.map { WebLinkUi(it.title, it.url) }
                     updateAssistantWebLinksPreview(assistantId, webLinksUi)
                 },
+                onDeltaThinking = { delta ->
+                    if (delta.isBlank()) return@runStream
+                    thinkingSb.append(delta)
+                    val now = System.currentTimeMillis()
+                    if (now - lastThinkingUpdateAt < 400L) return@runStream
+                    lastThinkingUpdateAt = now
+                    updateAssistantThinkingPreview(assistantId, thinkingSb.toString())
+                },
                 onDeltaText = onDeltaText@{ delta ->
                     sb.append(delta)
                     val textNow = sb.toString()
@@ -293,7 +303,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     viewModelScope.launch(Dispatchers.IO) {
                         val msg = db.messages().getById(assistantId) ?: return@launch
                         val finalText = sb.toString()
-                        val encoded = if (webLinksUi.isNotEmpty()) WebLinksCodec.encode(webLinksUi, finalText) else finalText
+                        val encoded = MessageContentCodec.encode(webLinksUi, thinking = thinkingSb.toString(), content = finalText)
                         db.messages().update(
                             msg.copy(
                                 content = encoded,
@@ -313,7 +323,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     viewModelScope.launch(Dispatchers.IO) {
                         val msg = db.messages().getById(assistantId) ?: return@launch
                         if (msg.content.isBlank()) {
-                            db.messages().update(msg.copy(content = "请求失败：${err}"))
+                            val encoded = MessageContentCodec.encode(emptyList(), thinkingSb.toString(), "请求失败：${err}")
+                            db.messages().update(msg.copy(content = encoded))
                         }
                         withContext(Dispatchers.Main) {
                             refreshMessages(conversationId)
@@ -345,6 +356,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (idx < 0) return
         val old = current[idx]
         val next = old.copy(content = textNow)
+        val list = current.toMutableList()
+        list[idx] = next
+        _messages.postValue(list)
+    }
+
+    private fun updateAssistantThinkingPreview(assistantId: Long, thinkingNow: String) {
+        val current = _messages.value ?: return
+        val idx = current.indexOfFirst { it.id == assistantId }
+        if (idx < 0) return
+        val old = current[idx]
+        if (old.thinking == thinkingNow) return
+        val next = old.copy(thinking = thinkingNow)
         val list = current.toMutableList()
         list[idx] = next
         _messages.postValue(list)
@@ -406,10 +429,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch {
                 withContext(Dispatchers.IO) {
                     val msg = db.messages().getById(assistantId) ?: return@withContext
-                    val decoded = WebLinksCodec.decode(msg.content)
+                    val decoded = MessageContentCodec.decode(msg.content)
                     val suffix = "\n\n（已中断）"
                     val next = if (decoded.content.endsWith(suffix)) decoded.content else (decoded.content + suffix)
-                    val encoded = if (decoded.links.isNotEmpty()) WebLinksCodec.encode(decoded.links, next) else next
+                    val encoded = MessageContentCodec.encode(decoded.links, decoded.thinking, next)
                     db.messages().update(msg.copy(content = encoded))
                 }
                 refreshMessages(convId)
@@ -663,11 +686,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // ...
         // [/WEB_LINKS]
         // <actual content>
-        val parsed = WebLinksCodec.decode(content)
+        val parsed = MessageContentCodec.decode(content)
         return MessageUi(
             id = id,
             role = role,
             content = parsed.content,
+            thinking = parsed.thinking,
             createdAt = createdAt,
             webLinks = parsed.links,
             branchEnabled = branchEnabled,
@@ -677,52 +701,76 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-private object WebLinksCodec {
-    private const val START = "[WEB_LINKS]"
-    private const val END = "[/WEB_LINKS]"
+private object MessageContentCodec {
+    private const val LINKS_START = "[WEB_LINKS]"
+    private const val LINKS_END = "[/WEB_LINKS]"
+    private const val THINK_START = "[THINKING]"
+    private const val THINK_END = "[/THINKING]"
 
     data class Decoded(
         val content: String,
+        val thinking: String,
         val links: List<WebLinkUi>
     )
 
-    fun encode(links: List<WebLinkUi>, content: String): String {
-        if (links.isEmpty()) return content
-        val sb = StringBuilder()
-        sb.append(START).append('\n')
-        links.forEach { l ->
-            sb.append(l.title.replace("\n", " ").trim())
-            sb.append('|')
-            sb.append(l.url.replace("\n", " ").trim())
-            sb.append('\n')
+    fun encode(links: List<WebLinkUi>, thinking: String, content: String): String {
+        val hasLinks = links.isNotEmpty()
+        val hasThinking = thinking.isNotBlank()
+        if (!hasLinks && !hasThinking) return content
+        val sb = StringBuilder(content.length + 256)
+        if (hasLinks) {
+            sb.append(LINKS_START).append('\n')
+            links.forEach { l ->
+                sb.append(l.title.replace("\n", " ").trim())
+                sb.append('|')
+                sb.append(l.url.replace("\n", " ").trim())
+                sb.append('\n')
+            }
+            sb.append(LINKS_END).append('\n')
         }
-        sb.append(END).append('\n')
+        if (hasThinking) {
+            sb.append(THINK_START).append('\n')
+            sb.append(thinking.trim())
+            sb.append('\n')
+            sb.append(THINK_END).append('\n')
+        }
         sb.append(content)
         return sb.toString()
     }
 
     fun decode(raw: String): Decoded {
-        val t = raw
-        val startIdx = t.indexOf(START)
-        if (startIdx != 0) {
-            return Decoded(content = raw, links = emptyList())
+        var t = raw
+        var links: List<WebLinkUi> = emptyList()
+        var thinking = ""
+
+        if (t.startsWith(LINKS_START)) {
+            val endIdx = t.indexOf(LINKS_END)
+            if (endIdx > 0) {
+                val block = t.substring(LINKS_START.length, endIdx)
+                val lines = block.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+                links = lines.mapNotNull { line ->
+                    val sep = line.indexOf('|')
+                    if (sep <= 0) return@mapNotNull null
+                    val title = line.substring(0, sep).trim()
+                    val url = line.substring(sep + 1).trim()
+                    if (url.isBlank()) return@mapNotNull null
+                    WebLinkUi(title = if (title.isBlank()) url else title, url = url)
+                }
+                t = t.substring(endIdx + LINKS_END.length)
+                t = t.trimStart('\n', '\r', ' ')
+            }
         }
-        val endIdx = t.indexOf(END)
-        if (endIdx < 0) {
-            return Decoded(content = raw, links = emptyList())
+
+        if (t.startsWith(THINK_START)) {
+            val endIdx = t.indexOf(THINK_END)
+            if (endIdx > 0) {
+                val block = t.substring(THINK_START.length, endIdx)
+                thinking = block.trim('\n', '\r', ' ')
+                t = t.substring(endIdx + THINK_END.length)
+                t = t.trimStart('\n', '\r', ' ')
+            }
         }
-        val linksBlock = t.substring(START.length, endIdx)
-        val lines = linksBlock.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
-        val links = lines.mapNotNull { line ->
-            val sep = line.indexOf('|')
-            if (sep <= 0) return@mapNotNull null
-            val title = line.substring(0, sep).trim()
-            val url = line.substring(sep + 1).trim()
-            if (url.isBlank()) return@mapNotNull null
-            WebLinkUi(title = if (title.isBlank()) url else title, url = url)
-        }
-        val after = t.substring(endIdx + END.length)
-        val content = after.trimStart('\n', '\r', ' ')
-        return Decoded(content = content, links = links)
+
+        return Decoded(content = t, thinking = thinking, links = links)
     }
 }

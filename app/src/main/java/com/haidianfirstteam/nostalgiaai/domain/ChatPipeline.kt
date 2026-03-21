@@ -216,6 +216,7 @@ class ChatPipeline(
         compatIntervalMs: Long,
         onCallReady: (Call) -> Unit,
         onStart: (Output) -> Unit,
+        onDeltaThinking: (String) -> Unit,
         onDeltaText: (String) -> Unit,
         onDone: (Output) -> Unit,
         onError: (String) -> Unit
@@ -330,6 +331,9 @@ class ChatPipeline(
                                 emitBuffered(force = true)
                                 onError(chunk.error)
                             }
+                            chunk.deltaThinking != null -> {
+                                onDeltaThinking(chunk.deltaThinking)
+                            }
                             chunk.deltaText != null -> {
                                 if (intervalMs > 0) {
                                     buffer.append(chunk.deltaText)
@@ -385,6 +389,9 @@ class ChatPipeline(
                                 chunk.error != null -> {
                                     emitBuffered(force = true)
                                     onError(chunk.error)
+                                }
+                                chunk.deltaThinking != null -> {
+                                    onDeltaThinking(chunk.deltaThinking)
                                 }
                                 chunk.deltaText != null -> {
                                     if (intervalMs > 0) {

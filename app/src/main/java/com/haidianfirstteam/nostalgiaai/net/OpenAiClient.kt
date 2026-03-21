@@ -52,6 +52,7 @@ class OpenAiClient(
 
     data class StreamChunk(
         val deltaText: String? = null,
+        val deltaThinking: String? = null,
         val done: Boolean = false,
         val error: String? = null
     )
@@ -133,10 +134,17 @@ class OpenAiClient(
             // chat.completions streaming: choices[0].delta.content
             val delta = choice.getAsJsonObject("delta")
             val deltaContent = delta?.get("content")
+            // DeepSeek-like providers may stream reasoning separately.
+            val deltaThinking = delta?.get("reasoning_content")?.asStringOrNull()
+                ?: delta?.get("reasoning")?.asStringOrNull()
+                ?: delta?.get("thinking")?.asStringOrNull()
             val text = extractText(deltaContent)
                 ?: choice.get("text").asStringOrNull() // legacy completions
                 ?: choice.getAsJsonObject("message")?.get("content")?.let { extractText(it) }
 
+            if (!deltaThinking.isNullOrEmpty()) {
+                onChunk(StreamChunk(deltaThinking = deltaThinking))
+            }
             if (!text.isNullOrEmpty()) {
                 onChunk(StreamChunk(deltaText = text))
             }

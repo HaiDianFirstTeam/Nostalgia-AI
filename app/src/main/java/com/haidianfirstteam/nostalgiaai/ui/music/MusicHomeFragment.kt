@@ -392,6 +392,12 @@ class MusicHomeFragment : Fragment() {
                     api1.search(source = "netease", keyword = keyword, page = 1, count = 20)
                 }
                 trackAdapter.submit(tracks)
+
+                // Make final UI state explicit (some legacy devices have flaky focus callbacks).
+                b.historyPanel.visibility = View.GONE
+                b.rvTracks.visibility = View.VISIBLE
+                b.etSearch.clearFocus()
+                b.root.requestFocus()
             } catch (t: Throwable) {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle("搜索失败")
