@@ -34,6 +34,8 @@ class MessageAdapter(
 
     private val thinkingExpanded = HashMap<Long, Boolean>()
     private val lastMarkdownRenderAt = HashMap<Long, Long>()
+    private val lastMarkdownRenderedHash = HashMap<Long, Int>()
+    private val lastMarkdownRenderedLen = HashMap<Long, Int>()
 
     // When streaming, rendering markdown on every tiny update can cause heavy relayout/jitter.
     // We render plain text for the current streaming assistant bubble, and apply markdown after done.
@@ -280,8 +282,22 @@ class MessageAdapter(
                     // In between, show raw text (fast).
                     val now = android.os.SystemClock.elapsedRealtime()
                     val last = lastMarkdownRenderAt[item.id] ?: 0L
-                    if (now - last >= 1500L) {
+                    val curHash = contentForMarkdown.hashCode()
+                    val renderedHash = lastMarkdownRenderedHash[item.id]
+                    val lastLen = lastMarkdownRenderedLen[item.id] ?: 0
+                    val changed = renderedHash == null || renderedHash != curHash
+
+                    // Only trigger a markdown render when:
+                    // - enough time has passed
+                    // - content changed
+                    // - and the newly appended part (or the whole content) contains markdown-ish tokens
+                    val delta = if (contentForMarkdown.length > lastLen) contentForMarkdown.substring(lastLen) else contentForMarkdown
+                    val needsMarkdown = containsMarkdownTokens(delta) || containsMarkdownTokens(contentForMarkdown)
+
+                    if (changed && needsMarkdown && now - last >= 1500L) {
                         lastMarkdownRenderAt[item.id] = now
+                        lastMarkdownRenderedHash[item.id] = curHash
+                        lastMarkdownRenderedLen[item.id] = contentForMarkdown.length
                         markwon.setMarkdown(b.tvContent, contentForMarkdown)
                     } else {
                         b.tvContent.text = contentForMarkdown
@@ -395,5 +411,28 @@ class MessageAdapter(
                 v.setDiagram(diagrams[idx])
             }
         }
+    }
+
+    private fun containsMarkdownTokens(s: String): Boolean {
+        if (s.isBlank()) return false
+        // Keep it cheap: we only need a heuristic.
+        // - Backticks: inline/code fences
+        // - Asterisks/underscores: emphasis
+        // - Brackets/parentheses: links/images
+        // - $ or \\: math
+        // - '==': highlight
+        // - '<': html tags
+        return s.indexOf('`') >= 0 ||
+            s.indexOf('*') >= 0 ||
+            s.indexOf('_') >= 0 ||
+            s.indexOf('[') >= 0 ||
+            s.indexOf(']') >= 0 ||
+            s.indexOf('(') >= 0 ||
+            s.indexOf(')') >= 0 ||
+            s.indexOf('!') >= 0 ||
+            s.indexOf('$') >= 0 ||
+            s.indexOf('\\') >= 0 ||
+            s.indexOf('<') >= 0 ||
+            s.contains("==")
     }
 }

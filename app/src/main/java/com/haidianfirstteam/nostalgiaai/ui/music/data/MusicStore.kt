@@ -14,10 +14,39 @@ class MusicStore(
         private const val KEY_SOURCE = "music_source"
         private const val KEY_SEARCH_HISTORY = "music_search_history"
         private const val KEY_SETTINGS = "music_settings"
+        private const val KEY_API1_PROVIDER = "music_api1_provider"
+        private const val KEY_API1_SEARCH_KIND = "music_api1_search_kind" // track|album
         private const val KEY_PLAY_HISTORY = "music_play_history"
         private const val KEY_PLAYLISTS = "music_playlists"
         private const val KEY_LOCAL_MUSIC = "music_local_music"
         private const val MAX_HISTORY = 30
+    }
+
+    suspend fun getApi1ProviderSource(): String {
+        val raw = db.appSettings().get(KEY_API1_PROVIDER)?.value
+        val t = raw?.trim().orEmpty()
+        return if (t.isBlank()) "netease" else t
+    }
+
+    suspend fun setApi1ProviderSource(source: String) {
+        val t = source.trim().ifBlank { "netease" }
+        db.appSettings().put(AppSettingEntity(KEY_API1_PROVIDER, t))
+    }
+
+    enum class Api1SearchKind { TRACK, ALBUM }
+
+    suspend fun getApi1SearchKind(): Api1SearchKind {
+        val raw = db.appSettings().get(KEY_API1_SEARCH_KIND)?.value?.trim()?.lowercase()
+        return when (raw) {
+            "album" -> Api1SearchKind.ALBUM
+            "track" -> Api1SearchKind.TRACK
+            else -> Api1SearchKind.TRACK
+        }
+    }
+
+    suspend fun setApi1SearchKind(kind: Api1SearchKind) {
+        val v = if (kind == Api1SearchKind.ALBUM) "album" else "track"
+        db.appSettings().put(AppSettingEntity(KEY_API1_SEARCH_KIND, v))
     }
 
     suspend fun getSource(): MusicSourceType {

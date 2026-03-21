@@ -212,6 +212,9 @@ object MarkwonFactory {
         // LaTeX bracket forms: \( ... \) and \[ ... \]
         val latexInlineParen = Regex("\\\\\\((.+?)\\\\\\)")
         val latexDisplayBracket = Regex("\\\\\\[(.+?)\\\\\\]")
+        // User-friendly bracket LaTeX: [\Delta = ...] or [\begin{cases}...\end{cases}]
+        // Only treat as math when inside starts with a backslash.
+        val latexUserSquare = Regex("\\[(\\\\[^\\]]+)]")
         fun looksLikeMath(s: String): Boolean {
             val t = s.trim()
             if (t.isEmpty()) return false
@@ -301,6 +304,16 @@ object MarkwonFactory {
                 }
                 s = latexDisplayBracket.replace(s) { m0 ->
                     val inner = m0.groupValues[1]
+                    if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
+                }
+
+                s = latexUserSquare.replace(s) { m0 ->
+                    var inner = m0.groupValues[1]
+                    // Tolerate user writing `\2x` for a new line in cases.
+                    if (inner.contains("\\begin{cases}") && inner.contains("\\end{cases}")) {
+                        // Convert backslash before a digit to a newline marker (\\)
+                        inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
+                    }
                     if (looksLikeMath(inner)) "$$${inner}$$" else m0.value
                 }
             }

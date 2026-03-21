@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,6 +30,10 @@ class MusicHomeFragment : Fragment() {
     private val api1 = MusicApi1Client()
     private lateinit var trackAdapter: TrackAdapter
     private lateinit var historyAdapter: HistoryAdapter
+    private lateinit var albumAdapter: AlbumAdapter
+
+    private var api1Source: String = "netease"
+    private var searchKind: MusicStore.Api1SearchKind = MusicStore.Api1SearchKind.TRACK
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _b = FragmentMusicHomeBinding.inflate(inflater, container, false)
@@ -43,6 +48,11 @@ class MusicHomeFragment : Fragment() {
             onPlay = { t -> playTrack(t) },
             onDownload = { t -> downloadTrack(t) },
             onMore = { t -> showTrackActions(t) }
+        )
+        albumAdapter = AlbumAdapter(
+            onOpen = { album ->
+                startActivity(MusicAlbumDetailActivity.newIntent(requireContext(), album))
+            }
         )
         b.rvTracks.layoutManager = LinearLayoutManager(requireContext())
         b.rvTracks.adapter = trackAdapter
@@ -71,15 +81,26 @@ class MusicHomeFragment : Fragment() {
         }
 
         b.btnSwitchSource.setOnClickListener {
-            // Source2 removed. Keep button hidden.
+            showApi1SourceDialog()
         }
-        b.btnSwitchSource.visibility = View.GONE
+        b.btnSwitchSource.visibility = View.VISIBLE
 
-        b.btnAddPlaylist.setOnClickListener {
-            // Source2 removed; playlist parsing is temporarily disabled.
-            com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "音源2已移除：歌单/专辑解析功能暂不可用")
-        }
+        // Keep "Add playlist" hidden here; playlists live in "我的" tab.
         b.btnAddPlaylist.visibility = View.GONE
+
+        // Search kind toggle (track/album)
+        b.toggleSearchType.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val next = if (checkedId == b.btnTypeAlbum.id) MusicStore.Api1SearchKind.ALBUM else MusicStore.Api1SearchKind.TRACK
+            if (next == searchKind) return@addOnButtonCheckedListener
+            searchKind = next
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) { store.setApi1SearchKind(searchKind) }
+            }
+            // Auto re-search if keyword exists
+            val kw = b.etSearch.text?.toString().orEmpty().trim()
+            if (kw.isNotBlank()) runSearch(kw)
+        }
 
         b.etSearch.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) refreshHistory()
@@ -99,6 +120,39 @@ class MusicHomeFragment : Fragment() {
         }
 
         refreshHistory()
+
+        // Load persisted source + kind
+        lifecycleScope.launch {
+            val src = withContext(Dispatchers.IO) { store.getApi1ProviderSource() }
+            val kind = withContext(Dispatchers.IO) { store.getApi1SearchKind() }
+            api1Source = src
+            searchKind = kind
+            // reflect UI
+            val id = if (kind == MusicStore.Api1SearchKind.ALBUM) b.btnTypeAlbum.id else b.btnTypeTrack.id
+            b.toggleSearchType.check(id)
+        }
+    }
+
+    private fun showApi1SourceDialog() {
+        val ctx = requireContext()
+        val list = MusicApi1Sources.all
+        val curIdx = list.indexOf(api1Source).let { if (it < 0) 0 else it }
+        MaterialAlertDialogBuilder(ctx)
+            .setTitle("切换音乐源（API1）")
+            .setSingleChoiceItems(list.toTypedArray(), curIdx) { dlg, which ->
+                val picked = list[which]
+                api1Source = picked
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { store.setApi1ProviderSource(picked) }
+                }
+                com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已切换：$picked")
+                dlg.dismiss()
+                // Auto re-search if keyword exists
+                val kw = b.etSearch.text?.toString().orEmpty().trim()
+                if (kw.isNotBlank()) runSearch(kw)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun showTrackActions(t: MusicTrack) {
@@ -376,7 +430,20 @@ class MusicHomeFragment : Fragment() {
         val keyword = keywordRaw.trim()
         if (keyword.isBlank()) return
 
+        // Force UI into results mode (do not rely on focus callbacks).
         b.historyPanel.visibility = View.GONE
+        b.rvTracks.visibility = View.VISIBLE
+
+        // Hide keyboard & drop focus, otherwise history panel might come back.
+        try {
+            val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(b.etSearch.windowToken, 0)
+        } catch (_: Throwable) {
+            // ignore
+        }
+        b.etSearch.clearFocus()
+        b.root.requestFocus()
+
         // On some legacy devices, clearFocus() might not trigger onFocusChange reliably
         // (e.g. when no other focusable view takes focus), which can leave rvTracks hidden.
         // Make the UI state explicit before launching the search.
@@ -387,17 +454,41 @@ class MusicHomeFragment : Fragment() {
         lifecycleScope.launch {
             b.progress.visibility = View.VISIBLE
             try {
-                val tracks: List<MusicTrack> = withContext(Dispatchers.IO) {
-                    store.addSearchHistory(keyword)
-                    api1.search(source = "netease", keyword = keyword, page = 1, count = 20)
+                withContext(Dispatchers.IO) { store.addSearchHistory(keyword) }
+
+                if (searchKind == MusicStore.Api1SearchKind.TRACK) {
+                    val tracks: List<MusicTrack> = withContext(Dispatchers.IO) {
+                        api1.search(source = api1Source, keyword = keyword, page = 1, count = 20)
+                    }
+                    b.rvTracks.adapter = trackAdapter
+                    trackAdapter.submit(tracks)
+                    if (tracks.isEmpty()) {
+                        com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "没有搜索结果（或请求过于频繁被限制）")
+                    }
+                } else {
+                    // Album mode: try *_album first, then fall back to base source.
+                    val tracks: List<MusicTrack> = withContext(Dispatchers.IO) {
+                        val s1 = api1Source + "_album"
+                        val t1 = try { api1.search(source = s1, keyword = keyword, page = 1, count = 50) } catch (_: Throwable) { emptyList() }
+                        if (t1.isNotEmpty()) t1 else api1.search(source = api1Source, keyword = keyword, page = 1, count = 50)
+                    }
+                    val albums = groupAsAlbums(tracks)
+                    b.rvTracks.adapter = albumAdapter
+                    albumAdapter.submit(albums)
+                    if (albums.isEmpty()) {
+                        com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "没有专辑结果（或请求过于频繁被限制）")
+                    }
                 }
-                trackAdapter.submit(tracks)
 
                 // Make final UI state explicit (some legacy devices have flaky focus callbacks).
                 b.historyPanel.visibility = View.GONE
                 b.rvTracks.visibility = View.VISIBLE
                 b.etSearch.clearFocus()
                 b.root.requestFocus()
+
+                if (tracks.isEmpty()) {
+                    com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(requireContext(), "没有搜索结果（或请求过于频繁被限制）")
+                }
             } catch (t: Throwable) {
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle("搜索失败")
@@ -408,6 +499,31 @@ class MusicHomeFragment : Fragment() {
                 b.progress.visibility = View.GONE
             }
         }
+    }
+
+    private fun groupAsAlbums(tracks: List<MusicTrack>): List<MusicAlbumUi> {
+        if (tracks.isEmpty()) return emptyList()
+        val groups = tracks.filter { it.album?.isNotBlank() == true }
+            .groupBy { (it.source.ifBlank { api1Source }) + "|" + (it.album ?: "") + "|" + (it.coverId ?: "") }
+        val out = ArrayList<MusicAlbumUi>(groups.size)
+        for ((key, list) in groups) {
+            val first = list.firstOrNull() ?: continue
+            val album = first.album ?: continue
+            val artists = first.artists.joinToString("/").ifBlank { "未知歌手" }
+            out.add(
+                MusicAlbumUi(
+                    key = key,
+                    source = first.source.ifBlank { api1Source },
+                    albumName = album,
+                    coverId = first.coverId,
+                    trackCount = list.size,
+                    artistsSummary = artists,
+                    tracks = list
+                )
+            )
+        }
+        // stable sort: most tracks first
+        return out.sortedWith(compareByDescending<MusicAlbumUi> { it.trackCount }.thenBy { it.albumName })
     }
 
     override fun onDestroyView() {

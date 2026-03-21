@@ -56,15 +56,29 @@ object TutorialRegistry {
 
                 // Home tab controls
                 TutorialStep(R.id.btnSearch, "搜索按钮"),
+                TutorialStep(R.id.btnSwitchSource, "切换音乐源"),
+                TutorialStep(R.id.btnTypeTrack, "搜索：单曲"),
+                TutorialStep(R.id.btnTypeAlbum, "搜索：专辑"),
                 TutorialStep(R.id.btnClearHistory, "清空历史"),
                 TutorialStep(text = "历史-删除", finder = TutorialFinders.recyclerChildViewById(R.id.rvHistory, 0, R.id.btnDelete)),
+                // Results: track mode vs album mode (best-effort)
                 TutorialStep(text = "结果-播放", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnPlay)),
                 TutorialStep(text = "结果-下载", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnDownload)),
                 TutorialStep(text = "结果-更多", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnMore)),
+                TutorialStep(text = "专辑-进入", finder = TutorialFinders.recyclerChildViewById(R.id.rvTracks, 0, R.id.btnOpen)),
 
                 // Player bar
                 TutorialStep(R.id.btnPlayPause, "播放/暂停"),
                 TutorialStep(R.id.btnQueue, "队列"),
+            )
+
+            is com.haidianfirstteam.nostalgiaai.ui.music.MusicAlbumDetailActivity -> "music_album_detail" to listOf(
+                TutorialStep(R.id.btnAddQueue, "一键加入播放列表"),
+                TutorialStep(R.id.btnSavePlaylist, "一键保存到歌单"),
+                TutorialStep(R.id.btnBatchDownload, "批量下载"),
+                TutorialStep(text = "歌曲-播放", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnPlay)),
+                TutorialStep(text = "歌曲-下载", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnDownload)),
+                TutorialStep(text = "歌曲-更多", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnMore)),
             )
 
             is MusicPlayerActivity -> "music_player" to listOf(

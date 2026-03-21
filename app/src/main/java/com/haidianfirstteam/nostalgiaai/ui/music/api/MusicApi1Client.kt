@@ -6,6 +6,7 @@ import com.google.gson.JsonParser
 import com.haidianfirstteam.nostalgiaai.net.HttpClients
 import okhttp3.HttpUrl
 import okhttp3.Request
+import java.nio.charset.Charset
 
 /**
  * API1: GD Studio music-api.gdstudio.xyz
@@ -27,12 +28,25 @@ class MusicApi1Client(
 
         val req = Request.Builder().url(url).get().build()
         client.newCall(req).execute().use { resp ->
-            val body = resp.body()?.string().orEmpty()
+            val bytes = resp.body()?.bytes() ?: ByteArray(0)
+            val body = decodeBestEffort(bytes)
             if (!resp.isSuccessful) {
                 throw IllegalStateException("HTTP ${resp.code()} ${resp.message()} ${body.take(300)}")
             }
-            val el: JsonElement = JsonParser.parseString(body)
-            if (!el.isJsonArray) return emptyList()
+            val el: JsonElement = try {
+                JsonParser.parseString(body)
+            } catch (e: Throwable) {
+                throw IllegalStateException("invalid json: ${e.message}\n${body.take(300)}")
+            }
+            if (!el.isJsonArray) {
+                // API may return error object: {"detail":"..."}
+                val msg = try {
+                    if (el.isJsonObject) el.asJsonObject.get("detail")?.asString ?: body.take(300) else body.take(300)
+                } catch (_: Throwable) {
+                    body.take(300)
+                }
+                throw IllegalStateException(msg)
+            }
             val arr = el.asJsonArray
             val out = ArrayList<MusicTrack>(arr.size())
             for (e in arr) {
@@ -61,6 +75,18 @@ class MusicApi1Client(
             }
             return out
         }
+    }
+
+    private fun decodeBestEffort(bytes: ByteArray): String {
+        if (bytes.isEmpty()) return ""
+        // This API sometimes returns non-UTF8 bytes but declares application/json.
+        // Try UTF-8 first; if it contains lots of replacement chars, fall back to GB18030.
+        fun decode(cs: Charset): String = try { String(bytes, cs) } catch (_: Throwable) { "" }
+        val utf8 = decode(Charsets.UTF_8)
+        val bad = utf8.count { it == '\uFFFD' }
+        if (bad <= 2) return utf8
+        val gb = decode(Charset.forName("GB18030"))
+        return if (gb.isNotBlank()) gb else utf8
     }
 
     fun getPlayUrl(source: String, trackId: String, br: Int): MusicPlayUrl {
