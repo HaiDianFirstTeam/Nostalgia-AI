@@ -82,11 +82,13 @@ android {
 }
 
 // Fix duplicate classes from transitive JetBrains annotations.
-// Some dependencies bring `org.jetbrains:annotations` (new) while others bring
-// `org.jetbrains:annotations-java5` (old). They contain overlapping classes and
-// will break `:app:checkReleaseDuplicateClasses`.
+// Some deps bring `org.jetbrains:annotations` while prism4j-bundler brings
+// `org.jetbrains:annotations-java5`. They overlap and break
+// `:app:checkReleaseDuplicateClasses`. Also, Kotlin codegen expects
+// `org.jetbrains.annotations.NotNull` to be available on classpath.
+// Solution: keep modern `annotations` and exclude `annotations-java5`.
 configurations.all {
-    exclude group: 'org.jetbrains', module: 'annotations'
+    exclude group: 'org.jetbrains', module: 'annotations-java5'
 }
 
 dependencies {
@@ -147,6 +149,10 @@ dependencies {
     // Prism4j (syntax highlight for Markwon)
     implementation 'io.noties:prism4j:2.0.0'
     kapt 'io.noties:prism4j-bundler:2.0.0'
+
+    // Kotlin compiler may require these on classpath during IR codegen.
+    // Keep a single JetBrains annotations artifact to avoid duplicates.
+    implementation 'org.jetbrains:annotations:23.0.0'
 }
 
 def computeVersionName() {
