@@ -202,9 +202,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (!currentCoroutineContext().isActive) return
 
             val replyText = out.text
-            val encoded = if (out.webLinks.isNotEmpty()) {
-                WebLinksCodec.encode(out.webLinks.map { WebLinkUi(it.title, it.url) }, replyText)
-            } else replyText
+            val webLinksUi = out.webLinks.map { WebLinkUi(it.title, it.url) }
+            val encoded = MessageContentCodec.encode(webLinksUi, thinking = "", content = replyText)
 
             withContext(Dispatchers.IO) {
                 db.messages().insert(
