@@ -15,6 +15,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.databinding.ItemMessageAiBinding
 import com.haidianfirstteam.nostalgiaai.databinding.ItemMessageUserBinding
 import io.noties.markwon.Markwon
+import android.text.SpannableStringBuilder
 
 
 class MessageAdapter(
@@ -41,7 +42,19 @@ class MessageAdapter(
     // We render plain text for the current streaming assistant bubble, and apply markdown after done.
     private var streamingMessageId: Long? = null
 
+    private data class StreamingMdState(
+        var fullText: String = "",
+        var renderedPrefixLen: Int = 0,
+        var rendered: SpannableStringBuilder = SpannableStringBuilder()
+    )
+
+    private val streamingStates = HashMap<Long, StreamingMdState>()
+
     fun setStreamingMessageId(id: Long?) {
+        if (streamingMessageId != null && streamingMessageId != id) {
+            // Drop previous streaming incremental state to avoid leaks.
+            streamingStates.remove(streamingMessageId!!)
+        }
         streamingMessageId = id
     }
 
@@ -278,30 +291,37 @@ class MessageAdapter(
                 b.tvContent.visibility = View.VISIBLE
                 val sid = streamingMessageId
                 if (sid != null && item.id == sid) {
-                    // Streaming bubble: render markdown at a low frequency (1.5s) to reduce jitter.
-                    // In between, show raw text (fast).
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    val last = lastMarkdownRenderAt[item.id] ?: 0L
-                    val curHash = contentForMarkdown.hashCode()
-                    val renderedHash = lastMarkdownRenderedHash[item.id]
-                    val lastLen = lastMarkdownRenderedLen[item.id] ?: 0
-                    val changed = renderedHash == null || renderedHash != curHash
-
-                    // Only trigger a markdown render when:
-                    // - enough time has passed
-                    // - content changed
-                    // - and the newly appended part (or the whole content) contains markdown-ish tokens
-                    val delta = if (contentForMarkdown.length > lastLen) contentForMarkdown.substring(lastLen) else contentForMarkdown
-                    val needsMarkdown = containsMarkdownTokens(delta) || containsMarkdownTokens(contentForMarkdown)
-
-                    if (changed && needsMarkdown && now - last >= 1500L) {
-                        lastMarkdownRenderAt[item.id] = now
-                        lastMarkdownRenderedHash[item.id] = curHash
-                        lastMarkdownRenderedLen[item.id] = contentForMarkdown.length
-                        markwon.setMarkdown(b.tvContent, contentForMarkdown)
-                    } else {
-                        b.tvContent.text = contentForMarkdown
+                    // Streaming bubble: incremental render.
+                    // - Never re-render the already-rendered prefix.
+                    // - Only parse & append new completed line segments.
+                    // - Tail segment (no newline yet) stays plain text.
+                    val st = streamingStates.getOrPut(item.id) { StreamingMdState() }
+                    val prev = st.fullText
+                    val next = contentForMarkdown
+                    if (prev.isNotEmpty() && !next.startsWith(prev)) {
+                        // Non-append update: fall back to reset.
+                        st.fullText = ""
+                        st.renderedPrefixLen = 0
+                        st.rendered = SpannableStringBuilder()
                     }
+                    st.fullText = next
+
+                    val baseLen = st.renderedPrefixLen.coerceIn(0, next.length)
+                    val delta = next.substring(baseLen)
+                    val cut = delta.lastIndexOf('\n')
+                    if (cut >= 0) {
+                        val segment = delta.substring(0, cut + 1)
+                        // Render only this new segment and append.
+                        val sp = markwon.toMarkdown(segment)
+                        st.rendered.append(sp)
+                        st.renderedPrefixLen = baseLen + segment.length
+                    }
+                    val tail = next.substring(st.renderedPrefixLen.coerceIn(0, next.length))
+                    val combined = SpannableStringBuilder()
+                    combined.append(st.rendered)
+                    combined.append(tail)
+                    b.tvContent.text = combined
+
                     // During streaming, do not render Mermaid WebViews (too heavy).
                     b.mermaidContainer.visibility = View.GONE
                     b.mermaidContainer.removeAllViews()

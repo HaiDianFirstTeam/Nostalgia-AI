@@ -230,6 +230,10 @@ object MarkwonFactory {
                 .replace("\\\\tfrac", "\\\\frac")
         }
 
+        // Normalize $ ... $ (spaces inside delimiters) -> $...$
+        // Some renderers/plugins fail when there is leading/trailing whitespace.
+        val inlineDollarLoose = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\s+\\$(?!\\$)")
+
         val out = ArrayList<String>(body.size + 16)
         var i = 0
         while (i < body.size) {
@@ -313,6 +317,42 @@ object MarkwonFactory {
             }
 
             var s = line
+
+            // Inline math: normalize $ ... $ spacing
+            if (s.indexOf('$') >= 0) {
+                s = inlineDollarLoose.replace(s) { m0 ->
+                    val inner = normalizeLatex(m0.groupValues[1].trim())
+                    "\\$${inner}\\$"
+                }
+            }
+
+            // Multi-line raw cases env (not wrapped by \[ \] in some LLM outputs)
+            // \begin{cases} ... \end{cases}
+            if (trimmed.contains("\\begin{cases}") && !trimmed.contains("\\end{cases}")) {
+                val buf = ArrayList<String>()
+                buf.add(line)
+                var j = i + 1
+                var foundEnd = false
+                while (j < body.size) {
+                    val l2 = body[j]
+                    buf.add(l2)
+                    if (l2.contains("\\end{cases}")) {
+                        foundEnd = true
+                        break
+                    }
+                    j++
+                }
+                if (foundEnd) {
+                    var inner = normalizeLatex(buf.joinToString("\n").trim())
+                    // Tolerate user writing `\2x` as a newline in cases.
+                    inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
+                    out.add("$$")
+                    out.add(inner)
+                    out.add("$$")
+                    i = j + 1
+                    continue
+                }
+            }
 
             // Emoji shortcuts
             if (s.indexOf(':') >= 0) {
