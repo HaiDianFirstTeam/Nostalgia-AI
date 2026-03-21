@@ -12,7 +12,7 @@ package com.haidianfirstteam.nostalgiaai.net
 object ExtraTrustAnchors {
 
     /** Let's Encrypt: ISRG Root X1 (PEM). */
-    const val ISRG_ROOT_X1_PEM: String = """
+    val ISRG_ROOT_X1_PEM: String = """
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
 TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
@@ -47,7 +47,7 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 """.trimIndent()
 
     /** Google Trust Services: GTS Root R1 (PEM). */
-    const val GTS_ROOT_R1_PEM: String = """
+    val GTS_ROOT_R1_PEM: String = """
 -----BEGIN CERTIFICATE-----
 MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFzANBgkqhkiG9w0BAQwFADBHMQsw
 CQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEU
@@ -82,7 +82,7 @@ bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
 """.trimIndent()
 
     /** Amazon Trust Services: Amazon Root CA 1 (cross-signed, PEM). */
-    const val AMAZON_ROOT_CA_1_PEM: String = """
+    val AMAZON_ROOT_CA_1_PEM: String = """
 -----BEGIN CERTIFICATE-----
 MIIEkjCCA3qgAwIBAgITBn+USionzfP6wq4rAfkI7rnExjANBgkqhkiG9w0BAQsF
 ADCBmDELMAkGA1UEBhMCVVMxEDAOBgNVBAgTB0FyaXpvbmExEzARBgNVBAcTClNj
