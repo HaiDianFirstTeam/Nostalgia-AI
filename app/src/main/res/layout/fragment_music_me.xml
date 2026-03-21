@@ -52,7 +52,7 @@
         android:layout_width="0dp"
         android:layout_height="64dp"
         android:layout_marginTop="12dp"
-        android:text="本地导入"
+        android:text="本地/下载管理"
         app:icon="@android:drawable/ic_input_add"
         app:iconGravity="textStart"
         app:cornerRadius="24dp"

@@ -1,7 +1,1 @@
-\begin{cases} x + y = H \quad &\text{（头的数量）}\\
-
-$ L \ge 2H $ 且 $ L \e 4H $
-
-\boxed{\begin{aligned}\text｛兔的数量｝y &= \frac
-
-＄H =10$，腿＄L=28 $
+无

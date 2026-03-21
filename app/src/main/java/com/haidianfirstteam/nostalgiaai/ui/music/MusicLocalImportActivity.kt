@@ -1,6 +1,7 @@
 package com.haidianfirstteam.nostalgiaai.ui.music
 
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
@@ -8,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.View
 import androidx.appcompat.view.ActionMode
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
@@ -16,42 +18,59 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.haidianfirstteam.nostalgiaai.NostalgiaApp
 import com.haidianfirstteam.nostalgiaai.R
-import com.haidianfirstteam.nostalgiaai.databinding.ActivityListBinding
+import com.haidianfirstteam.nostalgiaai.databinding.ActivityMusicLocalManagerBinding
 import com.haidianfirstteam.nostalgiaai.databinding.ItemLocalMusicBinding
+import com.haidianfirstteam.nostalgiaai.databinding.ItemMusicDownloadBinding
 import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
 import com.haidianfirstteam.nostalgiaai.ui.music.data.LocalMusicItem
+import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicDownloadItem
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
 import com.haidianfirstteam.nostalgiaai.util.ToastUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * 本地/下载管理：
+ * - 本地：导入文件/文件夹、列表、多选、删除、加入歌单/队列、重命名(仅列表名)
+ * - 下载：显示 DownloadManager 下载条目、进度、删除、播放
+ */
 class MusicLocalImportActivity : BaseActivity() {
 
-    private lateinit var binding: ActivityListBinding
+    private lateinit var binding: ActivityMusicLocalManagerBinding
     private lateinit var store: MusicStore
-    private lateinit var adapter: LocalMusicAdapter
+
+    private lateinit var localAdapter: LocalMusicAdapter
+    private lateinit var downloadAdapter: DownloadAdapter
 
     private var actionMode: ActionMode? = null
     private val selected = LinkedHashSet<String>()
 
+    private enum class Tab { LOCAL, DOWNLOADS }
+    private var tab: Tab = Tab.LOCAL
+    private var downloadsRefreshJob: Job? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityListBinding.inflate(layoutInflater)
+        binding = ActivityMusicLocalManagerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { finish() }
-
-        title = "本地歌曲导入"
+        title = "本地/下载管理"
 
         val app = application as NostalgiaApp
         store = MusicStore(app.db)
 
-        adapter = LocalMusicAdapter(
+        binding.recycler.layoutManager = LinearLayoutManager(this)
+
+        localAdapter = LocalMusicAdapter(
             onClick = { item ->
                 if (actionMode != null) {
                     toggleSelect(item.uri)
@@ -70,22 +89,85 @@ class MusicLocalImportActivity : BaseActivity() {
             selectionMode = { actionMode != null }
         )
 
-        binding.recycler.layoutManager = LinearLayoutManager(this)
-        binding.recycler.adapter = adapter
+        downloadAdapter = DownloadAdapter(
+            onPlay = { ui -> playDownload(ui) },
+            onDelete = { ui -> deleteDownload(ui) }
+        )
 
         binding.fab.setImageDrawable(ContextCompat.getDrawable(this, android.R.drawable.ic_input_add))
         binding.fab.setOnClickListener { showAddDialog() }
 
-        refresh()
+        binding.toggleTabs.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val next = if (checkedId == binding.btnTabDownloads.id) Tab.DOWNLOADS else Tab.LOCAL
+            if (next == tab) return@addOnButtonCheckedListener
+            setTab(next)
+        }
+
+        // default tab
+        binding.toggleTabs.check(binding.btnTabLocal.id)
+        setTab(Tab.LOCAL)
     }
 
-    private fun refresh() {
+    override fun onDestroy() {
+        downloadsRefreshJob?.cancel()
+        downloadsRefreshJob = null
+        super.onDestroy()
+    }
+
+    private fun setTab(next: Tab) {
+        tab = next
+        actionMode?.finish()
+
+        when (tab) {
+            Tab.LOCAL -> {
+                downloadsRefreshJob?.cancel()
+                downloadsRefreshJob = null
+                binding.fab.visibility = View.VISIBLE
+                binding.recycler.adapter = localAdapter
+                refreshLocal()
+            }
+
+            Tab.DOWNLOADS -> {
+                binding.fab.visibility = View.GONE
+                binding.recycler.adapter = downloadAdapter
+                startDownloadsRefreshLoop()
+            }
+        }
+    }
+
+    private fun refreshLocal() {
         lifecycleScope.launch {
             val list = withContext(Dispatchers.IO) { store.listLocalMusic() }
-            adapter.submit(list)
-            binding.empty.visibility = if (list.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+            localAdapter.submit(list)
+            binding.empty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
             binding.empty.text = "暂无本地歌曲，点右下角 + 导入"
         }
+    }
+
+    private fun startDownloadsRefreshLoop() {
+        downloadsRefreshJob?.cancel()
+        downloadsRefreshJob = lifecycleScope.launch {
+            while (isActive && tab == Tab.DOWNLOADS) {
+                refreshDownloadsOnce()
+                delay(1000)
+            }
+        }
+    }
+
+    private suspend fun refreshDownloadsOnce() {
+        val list = withContext(Dispatchers.IO) { store.listDownloads() }
+        if (list.isEmpty()) {
+            downloadAdapter.submit(emptyList())
+            binding.empty.visibility = View.VISIBLE
+            binding.empty.text = "暂无下载任务"
+            return
+        }
+        val ids = list.map { it.downloadId }
+        val snapshots = withContext(Dispatchers.IO) { MusicDownloader.query(this@MusicLocalImportActivity, ids) }
+        val ui = list.map { DownloadUi(item = it, snapshot = snapshots[it.downloadId]) }
+        downloadAdapter.submit(ui)
+        binding.empty.visibility = View.GONE
     }
 
     private fun showAddDialog() {
@@ -95,8 +177,7 @@ class MusicLocalImportActivity : BaseActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle("导入")
             .setItems(items.toTypedArray()) { _, which ->
-                if (which == 0) pickFiles()
-                else pickFolder()
+                if (which == 0) pickFiles() else pickFolder()
             }
             .setNegativeButton("取消", null)
             .show()
@@ -153,7 +234,7 @@ class MusicLocalImportActivity : BaseActivity() {
                 out
             }
             withContext(Dispatchers.IO) { store.upsertLocalMusic(items) }
-            refresh()
+            refreshLocal()
             ToastUtil.show(this@MusicLocalImportActivity, "已导入 ${items.size} 首")
         }
     }
@@ -181,7 +262,7 @@ class MusicLocalImportActivity : BaseActivity() {
                 return@launch
             }
             withContext(Dispatchers.IO) { store.upsertLocalMusic(items) }
-            refresh()
+            refreshLocal()
             ToastUtil.show(this@MusicLocalImportActivity, "已导入 ${items.size} 首")
         }
     }
@@ -219,9 +300,7 @@ class MusicLocalImportActivity : BaseActivity() {
         var c: Cursor? = null
         return try {
             c = contentResolver.query(u, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            if (c != null && c.moveToFirst()) {
-                c.getString(0)
-            } else null
+            if (c != null && c.moveToFirst()) c.getString(0) else null
         } catch (_: Throwable) {
             null
         } finally {
@@ -234,11 +313,14 @@ class MusicLocalImportActivity : BaseActivity() {
             override fun onCreateActionMode(mode: ActionMode, menu: android.view.Menu): Boolean {
                 mode.menuInflater.inflate(R.menu.menu_local_music_selection, menu)
                 updateSelectionTitle()
-                adapter.notifyDataSetChanged()
+                localAdapter.notifyDataSetChanged()
                 return true
             }
 
-            override fun onPrepareActionMode(mode: ActionMode, menu: android.view.Menu): Boolean = false
+            override fun onPrepareActionMode(mode: ActionMode, menu: android.view.Menu): Boolean {
+                menu.findItem(R.id.action_rename)?.isVisible = selected.size == 1
+                return true
+            }
 
             override fun onActionItemClicked(mode: ActionMode, item: android.view.MenuItem): Boolean {
                 return when (item.itemId) {
@@ -246,15 +328,23 @@ class MusicLocalImportActivity : BaseActivity() {
                         confirmDeleteSelected()
                         true
                     }
+
                     R.id.action_add_to_queue -> {
                         addSelectedToQueue()
                         mode.finish()
                         true
                     }
+
                     R.id.action_add_to_playlist -> {
                         addSelectedToPlaylist()
                         true
                     }
+
+                    R.id.action_rename -> {
+                        renameSelected()
+                        true
+                    }
+
                     else -> false
                 }
             }
@@ -262,34 +352,52 @@ class MusicLocalImportActivity : BaseActivity() {
             override fun onDestroyActionMode(mode: ActionMode) {
                 actionMode = null
                 selected.clear()
-                adapter.notifyDataSetChanged()
+                localAdapter.notifyDataSetChanged()
             }
         })
+    }
+
+    private fun updateSelectionTitle() {
+        actionMode?.title = "已选 ${selected.size}"
+        actionMode?.invalidate()
     }
 
     private fun toggleSelect(uri: String) {
         if (selected.contains(uri)) selected.remove(uri) else selected.add(uri)
         updateSelectionTitle()
-        adapter.notifyDataSetChanged()
-        if (selected.isEmpty()) {
-            actionMode?.finish()
-        }
-    }
-
-    private fun updateSelectionTitle() {
-        actionMode?.title = "已选 ${selected.size}"
+        localAdapter.notifyDataSetChanged()
     }
 
     private fun confirmDeleteSelected() {
-        val ctx = this
-        val uris = selected.toSet()
-        MaterialAlertDialogBuilder(ctx)
-            .setTitle("删除")
-            .setMessage("确定删除已选 ${uris.size} 首导入记录吗？")
-            .setPositiveButton("删除") { _, _ ->
+        if (selected.isEmpty()) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("从列表移除")
+            .setMessage("确认从本地列表移除所选歌曲吗？（不会删除原文件）")
+            .setPositiveButton("确认") { _, _ ->
                 lifecycleScope.launch {
+                    val uris = selected.toSet()
                     withContext(Dispatchers.IO) { store.deleteLocalMusic(uris) }
-                    refresh()
+                    actionMode?.finish()
+                    refreshLocal()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun renameSelected() {
+        val uri = selected.firstOrNull() ?: return
+        val cur = localAdapter.findByUri(uri) ?: return
+        val input = android.widget.EditText(this)
+        input.setText(cur.name)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("重命名")
+            .setView(input)
+            .setPositiveButton("确定") { _, _ ->
+                val name = input.text?.toString().orEmpty()
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { store.renameLocalMusic(uri, name) }
+                    refreshLocal()
                     actionMode?.finish()
                 }
             }
@@ -298,48 +406,40 @@ class MusicLocalImportActivity : BaseActivity() {
     }
 
     private fun addSelectedToQueue() {
-        val uris = selected.toList()
-        if (uris.isEmpty()) return
+        if (selected.isEmpty()) return
         lifecycleScope.launch {
             val list = withContext(Dispatchers.IO) { store.listLocalMusic() }
-            val map = list.associateBy { it.uri }
-            val tracks = uris.mapNotNull { map[it]?.toTrack() }
-            MusicPlayerManager.addToQueue(tracks)
+            val tracks = list.filter { selected.contains(it.uri) }.map { it.toTrack() }
+            if (tracks.isEmpty()) return@launch
+            val q = MusicPlayerManager.getQueue().toMutableList()
+            q.addAll(tracks)
+            MusicPlayerManager.setQueue(q, startIndex = (MusicPlayerManager.state.value?.index ?: -1).coerceAtLeast(0))
             ToastUtil.show(this@MusicLocalImportActivity, "已加入播放列表")
         }
     }
 
     private fun addSelectedToPlaylist() {
-        val ctx = this
-        val uris = selected.toList()
-        if (uris.isEmpty()) return
+        if (selected.isEmpty()) return
         lifecycleScope.launch {
             val pls = withContext(Dispatchers.IO) { store.listPlaylists() }
-            val names = ArrayList<String>()
-            names.add("新建歌单...")
-            names.addAll(pls.map { it.name })
-            MaterialAlertDialogBuilder(ctx)
+            if (pls.isEmpty()) {
+                ToastUtil.show(this@MusicLocalImportActivity, "暂无歌单")
+                return@launch
+            }
+            val names = pls.map { it.name }.toTypedArray()
+            MaterialAlertDialogBuilder(this@MusicLocalImportActivity)
                 .setTitle("加入歌单")
-                .setItems(names.toTypedArray()) { _, which ->
-                    if (which == 0) {
-                        val input = android.widget.EditText(ctx)
-                        input.hint = "歌单名称"
-                        MaterialAlertDialogBuilder(ctx)
-                            .setTitle("新建歌单")
-                            .setView(input)
-                            .setPositiveButton("创建") { _, _ ->
-                                lifecycleScope.launch {
-                                    val pl = withContext(Dispatchers.IO) { store.createPlaylist(input.text?.toString().orEmpty()) }
-                                    addUrisToPlaylist(pl.id, uris)
-                                    actionMode?.finish()
-                                }
-                            }
-                            .setNegativeButton("取消", null)
-                            .show()
-                    } else {
-                        val pid = pls[which - 1].id
-                        addUrisToPlaylist(pid, uris)
-                        actionMode?.finish()
+                .setItems(names) { _, which ->
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val list = store.listLocalMusic()
+                        val tracks = list.filter { selected.contains(it.uri) }.map { it.toTrack() }
+                        for (t in tracks) {
+                            store.addTrackToPlaylist(pls[which].id, t)
+                        }
+                        withContext(Dispatchers.Main) {
+                            ToastUtil.show(this@MusicLocalImportActivity, "已加入歌单")
+                            actionMode?.finish()
+                        }
                     }
                 }
                 .setNegativeButton("取消", null)
@@ -347,18 +447,34 @@ class MusicLocalImportActivity : BaseActivity() {
         }
     }
 
-    private fun addUrisToPlaylist(playlistId: Long, uris: List<String>) {
-        lifecycleScope.launch {
-            val list = withContext(Dispatchers.IO) { store.listLocalMusic() }
-            val map = list.associateBy { it.uri }
-            withContext(Dispatchers.IO) {
-                for (u in uris) {
-                    val it = map[u] ?: continue
-                    store.addTrackToPlaylist(playlistId, it.toTrack())
+    private fun playDownload(ui: DownloadUi) {
+        val snap = ui.snapshot
+        val local = snap?.localUri
+        if (local.isNullOrBlank()) {
+            ToastUtil.show(this, "暂无本地文件")
+            return
+        }
+        val t = ui.item.track.copy(id = local, source = "local")
+        MusicPlayerManager.playSingle(applicationContext, t, local)
+        ToastUtil.show(this, "开始播放")
+    }
+
+    private fun deleteDownload(ui: DownloadUi) {
+        val id = ui.item.downloadId
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除下载")
+            .setMessage("确认删除该下载任务/文件吗？")
+            .setPositiveButton("确认") { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        MusicDownloader.remove(this@MusicLocalImportActivity, longArrayOf(id))
+                        store.removeDownloads(setOf(id))
+                    }
+                    refreshDownloadsOnce()
                 }
             }
-            ToastUtil.show(this@MusicLocalImportActivity, "已加入歌单")
-        }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun LocalMusicItem.toTrack(): MusicTrack {
@@ -384,7 +500,7 @@ class MusicLocalImportActivity : BaseActivity() {
         private val onLongClick: (LocalMusicItem) -> Unit,
         private val isSelected: (String) -> Boolean,
         private val selectionMode: () -> Boolean,
-    ) : androidx.recyclerview.widget.RecyclerView.Adapter<LocalMusicAdapter.VH>() {
+    ) : RecyclerView.Adapter<LocalMusicAdapter.VH>() {
 
         private val items = ArrayList<LocalMusicItem>()
 
@@ -393,6 +509,8 @@ class MusicLocalImportActivity : BaseActivity() {
             items.addAll(list)
             notifyDataSetChanged()
         }
+
+        fun findByUri(uri: String): LocalMusicItem? = items.firstOrNull { it.uri == uri }
 
         override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
             val b = ItemLocalMusicBinding.inflate(android.view.LayoutInflater.from(parent.context), parent, false)
@@ -405,17 +523,101 @@ class MusicLocalImportActivity : BaseActivity() {
             holder.bind(items[position])
         }
 
-        inner class VH(private val b: ItemLocalMusicBinding) : androidx.recyclerview.widget.RecyclerView.ViewHolder(b.root) {
+        inner class VH(private val b: ItemLocalMusicBinding) : RecyclerView.ViewHolder(b.root) {
             fun bind(item: LocalMusicItem) {
                 b.tvTitle.text = item.name
                 b.tvSub.text = item.uri
+
+                // Android 4.4 StaticLayout ellipsize crash workaround
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
+                    try {
+                        b.tvTitle.ellipsize = null
+                        b.tvSub.ellipsize = null
+                        b.tvTitle.maxLines = 2
+                        b.tvSub.maxLines = 2
+                    } catch (_: Throwable) {
+                    }
+                }
+
                 val selMode = selectionMode()
-                b.cb.visibility = if (selMode) android.view.View.VISIBLE else android.view.View.GONE
+                b.cb.visibility = if (selMode) View.VISIBLE else View.GONE
                 b.cb.isChecked = isSelected(item.uri)
                 b.root.setOnClickListener { onClick(item) }
                 b.root.setOnLongClickListener {
                     onLongClick(item)
                     true
+                }
+            }
+        }
+    }
+
+    private data class DownloadUi(
+        val item: MusicDownloadItem,
+        val snapshot: MusicDownloader.Snapshot?
+    )
+
+    private class DownloadAdapter(
+        private val onPlay: (DownloadUi) -> Unit,
+        private val onDelete: (DownloadUi) -> Unit,
+    ) : RecyclerView.Adapter<DownloadAdapter.VH>() {
+
+        private val items = ArrayList<DownloadUi>()
+
+        fun submit(list: List<DownloadUi>) {
+            items.clear()
+            items.addAll(list)
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): VH {
+            val b = ItemMusicDownloadBinding.inflate(android.view.LayoutInflater.from(parent.context), parent, false)
+            return VH(b)
+        }
+
+        override fun getItemCount(): Int = items.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            holder.bind(items[position])
+        }
+
+        inner class VH(private val b: ItemMusicDownloadBinding) : RecyclerView.ViewHolder(b.root) {
+            fun bind(ui: DownloadUi) {
+                val t = ui.item.track
+                b.tvTitle.text = t.name
+
+                val snap = ui.snapshot
+                if (snap == null) {
+                    b.tvStatus.text = "未知状态"
+                    b.progress.isIndeterminate = true
+                    b.tvPercent.text = "-"
+                } else {
+                    b.tvStatus.text = statusText(snap.status, snap.reason)
+                    val total = snap.totalBytes
+                    val soFar = snap.bytesSoFar
+                    if (total > 0) {
+                        val pct = ((soFar * 100f) / total).toInt().coerceIn(0, 100)
+                        b.progress.isIndeterminate = false
+                        b.progress.progress = pct
+                        b.tvPercent.text = "${pct}%"
+                    } else {
+                        b.progress.isIndeterminate = snap.status == DownloadManager.STATUS_RUNNING
+                        b.progress.progress = 0
+                        b.tvPercent.text = "-"
+                    }
+                }
+
+                b.btnPlay.setOnClickListener { onPlay(ui) }
+                b.btnDelete.setOnClickListener { onDelete(ui) }
+            }
+
+            private fun statusText(status: Int, reason: Int): String {
+                return when (status) {
+                    DownloadManager.STATUS_PENDING -> "等待中"
+                    DownloadManager.STATUS_PAUSED -> "已暂停($reason)"
+                    DownloadManager.STATUS_RUNNING -> "下载中"
+                    DownloadManager.STATUS_SUCCESSFUL -> "已完成"
+                    DownloadManager.STATUS_FAILED -> "失败($reason)"
+                    else -> "未知($status)"
                 }
             }
         }

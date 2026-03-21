@@ -14,6 +14,7 @@ import com.haidianfirstteam.nostalgiaai.databinding.ActivityMusicAlbumDetailBind
 import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi1Client
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
+import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicDownloadItem
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
 import kotlinx.coroutines.Dispatchers
@@ -163,7 +164,17 @@ class MusicAlbumDetailActivity : BaseActivity() {
                                 val url = withContext(Dispatchers.IO) {
                                     api1.getPlayUrl(source = t.source.ifBlank { a.source }, trackId = t.id, br = br).url
                                 }
-                                MusicDownloader.enqueue(this@MusicAlbumDetailActivity, t, url)
+                                val enq = MusicDownloader.enqueue(this@MusicAlbumDetailActivity, t, url)
+                                withContext(Dispatchers.IO) {
+                                    store.addDownload(
+                                        MusicDownloadItem(
+                                            downloadId = enq.downloadId,
+                                            createdAt = System.currentTimeMillis(),
+                                            fileName = enq.fileName,
+                                            track = t
+                                        )
+                                    )
+                                }
                                 ok++
                             } catch (_: Throwable) {
                                 // ignore single failures
@@ -216,7 +227,17 @@ class MusicAlbumDetailActivity : BaseActivity() {
                 val url = withContext(Dispatchers.IO) {
                     api1.getPlayUrl(source = t.source.ifBlank { "netease" }, trackId = t.id, br = br).url
                 }
-                MusicDownloader.enqueue(ctx, t, url)
+                val enq = MusicDownloader.enqueue(ctx, t, url)
+                withContext(Dispatchers.IO) {
+                    store.addDownload(
+                        MusicDownloadItem(
+                            downloadId = enq.downloadId,
+                            createdAt = System.currentTimeMillis(),
+                            fileName = enq.fileName,
+                            track = t
+                        )
+                    )
+                }
                 com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已加入下载")
             } catch (e: Throwable) {
                 MaterialAlertDialogBuilder(ctx)

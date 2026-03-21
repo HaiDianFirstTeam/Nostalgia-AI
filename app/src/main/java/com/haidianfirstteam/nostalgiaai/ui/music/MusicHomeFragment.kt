@@ -16,6 +16,7 @@ import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicApi1Client
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicSourceType
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
+import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicDownloadItem
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,6 +54,13 @@ class MusicHomeFragment : Fragment() {
             UiMode.RESULTS -> {
                 b.historyPanel.visibility = View.GONE
                 b.rvTracks.visibility = View.VISIBLE
+                // Ensure we actually leave EditText focus; otherwise focus listener can flip us back.
+                try {
+                    b.etSearch.clearFocus()
+                    b.root.requestFocus()
+                } catch (_: Throwable) {
+                    // ignore
+                }
             }
         }
     }
@@ -341,7 +349,17 @@ class MusicHomeFragment : Fragment() {
                     // API1 expects the provider source string, not our internal track.source.
                     api1.getPlayUrl(source = "netease", trackId = t.id, br = br).url
                 }
-                MusicDownloader.enqueue(ctx, t, url)
+                val enq = MusicDownloader.enqueue(ctx, t, url)
+                withContext(Dispatchers.IO) {
+                    store.addDownload(
+                        MusicDownloadItem(
+                            downloadId = enq.downloadId,
+                            createdAt = System.currentTimeMillis(),
+                            fileName = enq.fileName,
+                            track = t
+                        )
+                    )
+                }
                 com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已加入下载")
             } catch (e: Throwable) {
                 MaterialAlertDialogBuilder(ctx)
@@ -417,7 +435,17 @@ class MusicHomeFragment : Fragment() {
                                     val next = cur.copy(downloadSource = MusicSourceType.API1_GDSTUDIO, quality = cur.quality.copy(downloadBr = br))
                                     withContext(Dispatchers.IO) { store.setSettings(next) }
                                 }
-                                MusicDownloader.enqueue(ctx, t, url)
+                                val enq = MusicDownloader.enqueue(ctx, t, url)
+                                withContext(Dispatchers.IO) {
+                                    store.addDownload(
+                                        MusicDownloadItem(
+                                            downloadId = enq.downloadId,
+                                            createdAt = System.currentTimeMillis(),
+                                            fileName = enq.fileName,
+                                            track = t
+                                        )
+                                    )
+                                }
                                 com.haidianfirstteam.nostalgiaai.util.ToastUtil.show(ctx, "已加入下载")
                             } catch (e: Throwable) {
                                 MaterialAlertDialogBuilder(ctx)

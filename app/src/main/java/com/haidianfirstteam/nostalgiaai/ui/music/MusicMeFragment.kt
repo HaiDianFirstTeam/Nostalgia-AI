@@ -36,7 +36,7 @@ class MusicMeFragment : Fragment() {
                 TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicHistory, "历史"),
                 TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicPlaylists, "歌单"),
                 TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicSettings, "音质"),
-                TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicLocalImport, "本地导入"),
+                TutorialStep(com.haidianfirstteam.nostalgiaai.R.id.btnMusicLocalImport, "本地/下载管理"),
             )
         )
         return root

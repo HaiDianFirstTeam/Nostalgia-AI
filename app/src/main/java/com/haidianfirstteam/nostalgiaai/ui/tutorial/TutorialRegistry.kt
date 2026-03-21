@@ -104,9 +104,21 @@ object TutorialRegistry {
             )
 
             is MusicLocalImportActivity -> "music_local" to listOf(
-                TutorialStep(text = "长按进入多选", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
+                TutorialStep(R.id.btnTabLocal, "本地列表"),
+                TutorialStep(R.id.btnTabDownloads, "下载管理"),
                 TutorialStep(R.id.fab, "导入"),
-                TutorialStep(text = "多选：删/歌单/队列"),
+                TutorialStep(text = "长按进入多选", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0), prepare = { a ->
+                    try { a.findViewById<android.view.View>(R.id.btnTabLocal)?.performClick() } catch (_: Throwable) {}
+                }),
+                TutorialStep(text = "多选：删/歌单/队列/重命名", prepare = { a ->
+                    try { a.findViewById<android.view.View>(R.id.btnTabLocal)?.performClick() } catch (_: Throwable) {}
+                }),
+                TutorialStep(text = "下载-播放", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnPlay), prepare = { a ->
+                    try { a.findViewById<android.view.View>(R.id.btnTabDownloads)?.performClick() } catch (_: Throwable) {}
+                }),
+                TutorialStep(text = "下载-删除", finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnDelete), prepare = { a ->
+                    try { a.findViewById<android.view.View>(R.id.btnTabDownloads)?.performClick() } catch (_: Throwable) {}
+                }),
             )
 
             is TranslateActivity -> "translate" to listOf(

@@ -11,6 +11,7 @@ import com.haidianfirstteam.nostalgiaai.databinding.ActivityListBinding
 import com.haidianfirstteam.nostalgiaai.ui.BaseActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.api.MusicTrack
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicPlayMode
+import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicDownloadItem
 import com.haidianfirstteam.nostalgiaai.ui.music.data.MusicStore
 import com.haidianfirstteam.nostalgiaai.ui.music.player.MusicPlayerManager
 import kotlinx.coroutines.Dispatchers
@@ -110,7 +111,15 @@ class MusicPlaylistDetailActivity : BaseActivity() {
                 for (t in tracks) {
                     try {
                         val url = api1.getPlayUrl(source = "netease", trackId = t.id, br = br).url
-                        MusicDownloader.enqueue(this@MusicPlaylistDetailActivity, t, url)
+                        val enq = MusicDownloader.enqueue(this@MusicPlaylistDetailActivity, t, url)
+                        store.addDownload(
+                            MusicDownloadItem(
+                                downloadId = enq.downloadId,
+                                createdAt = System.currentTimeMillis(),
+                                fileName = enq.fileName,
+                                track = t
+                            )
+                        )
                     } catch (e: Throwable) {
                         errors.add(t.name)
                     }

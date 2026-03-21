@@ -235,11 +235,11 @@ object MarkwonFactory {
                 .replace('｝', '}')
         }
 
-        // Normalize $ ... $ (spaces inside delimiters) -> $...$
-        // Some renderers/plugins fail when there is leading/trailing whitespace.
-        val inlineDollarLoose = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\s+\\$(?!\\$)")
-        val inlineDollarTrimLeft = Regex("(?<!\\$)\\$\\s+([^$\\n]+?)\\$(?!\\$)")
-        val inlineDollarTrimRight = Regex("(?<!\\$)\\$([^$\\n]+?)\\s+\\$(?!\\$)")
+        // Inline math: convert $...$ to \( ... \)
+        // Reason: in practice, $...$ is the most common LLM output, but not all parsers
+        // reliably handle dollar-delimited inline math. \( \) is consistently supported.
+        // Only single-dollar pairs are handled here (not $$ blocks).
+        val inlineDollarAny = Regex("(?<!\\$)\\$([^$\\n]+?)\\$(?!\\$)")
 
         val out = ArrayList<String>(body.size + 16)
         var i = 0
@@ -331,19 +331,15 @@ object MarkwonFactory {
                 s = s.replace('＄', '$')
             }
 
-            // Inline math: normalize $ ... $ spacing
+            // Inline math: $...$ -> \( ... \)
             if (s.indexOf('$') >= 0) {
-                s = inlineDollarLoose.replace(s) { m0 ->
+                s = inlineDollarAny.replace(s) { m0 ->
                     val inner = normalizeLatex(m0.groupValues[1].trim())
-                    "\$${inner}\$"
-                }
-                s = inlineDollarTrimLeft.replace(s) { m0 ->
-                    val inner = normalizeLatex(m0.groupValues[1].trim())
-                    "\$${inner}\$"
-                }
-                s = inlineDollarTrimRight.replace(s) { m0 ->
-                    val inner = normalizeLatex(m0.groupValues[1].trim())
-                    "\$${inner}\$"
+                    if (looksLikeMath(inner) || inner.any { it.isDigit() }) {
+                        "\\(${inner}\\)"
+                    } else {
+                        m0.value
+                    }
                 }
             }
 
@@ -354,8 +350,13 @@ object MarkwonFactory {
                 buf.add(line)
                 var j = i + 1
                 var foundEnd = false
+                var hitBlank = false
                 while (j < body.size) {
                     val l2 = body[j]
+                    if (l2.trim().isEmpty()) {
+                        hitBlank = true
+                        break
+                    }
                     buf.add(l2)
                     if (l2.contains("\\end{cases}")) {
                         foundEnd = true
@@ -363,8 +364,12 @@ object MarkwonFactory {
                     }
                     j++
                 }
-                if (foundEnd) {
+                if (foundEnd || hitBlank || j >= body.size) {
                     var inner = normalizeLatex(buf.joinToString("\n").trim())
+                    // Auto-close if model forgot \end{cases}
+                    if (!inner.contains("\\end{cases}")) {
+                        inner = inner.trimEnd() + "\n\\end{cases}"
+                    }
                     // Tolerate user writing `\2x` as a newline in cases.
                     inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
                     out.add("$$")

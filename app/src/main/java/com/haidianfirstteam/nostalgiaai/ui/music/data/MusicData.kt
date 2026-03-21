@@ -21,6 +21,20 @@ data class LocalMusicItem(
     val addedAt: Long,
 )
 
+/**
+ * Download task record for system DownloadManager.
+ *
+ * NOTE:
+ * - downloadId is the primary key for querying progress/status.
+ * - localUri/path is not persisted here; it can be queried from DownloadManager.
+ */
+data class MusicDownloadItem(
+    val downloadId: Long,
+    val createdAt: Long,
+    val fileName: String,
+    val track: MusicTrack,
+)
+
 enum class MusicPlayMode {
     ORDER,
     SHUFFLE,

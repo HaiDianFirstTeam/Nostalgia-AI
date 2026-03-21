@@ -19,6 +19,7 @@ class MusicStore(
         private const val KEY_PLAY_HISTORY = "music_play_history"
         private const val KEY_PLAYLISTS = "music_playlists"
         private const val KEY_LOCAL_MUSIC = "music_local_music"
+        private const val KEY_DOWNLOADS = "music_downloads"
         private const val MAX_HISTORY = 30
     }
 
@@ -221,6 +222,44 @@ class MusicStore(
         } catch (_: Throwable) {
             emptyList()
         }
+    }
+
+    suspend fun renameLocalMusic(uri: String, newName: String) {
+        val t = newName.trim()
+        if (t.isBlank()) return
+        val list = listLocalMusic().toMutableList()
+        val idx = list.indexOfFirst { it.uri == uri }
+        if (idx < 0) return
+        val cur = list[idx]
+        list[idx] = cur.copy(name = t)
+        db.appSettings().put(AppSettingEntity(KEY_LOCAL_MUSIC, gson.toJson(list)))
+    }
+
+    suspend fun listDownloads(): List<MusicDownloadItem> {
+        val raw = db.appSettings().get(KEY_DOWNLOADS)?.value ?: return emptyList()
+        return try {
+            val t = object : TypeToken<List<MusicDownloadItem>>() {}.type
+            val list: List<MusicDownloadItem> = gson.fromJson(raw, t) ?: emptyList()
+            list.sortedByDescending { it.createdAt }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun addDownload(item: MusicDownloadItem) {
+        val list = listDownloads().toMutableList()
+        // de-dup by downloadId
+        list.removeAll { it.downloadId == item.downloadId }
+        list.add(0, item)
+        // cap to avoid unbounded growth
+        val next = list.take(2000)
+        db.appSettings().put(AppSettingEntity(KEY_DOWNLOADS, gson.toJson(next)))
+    }
+
+    suspend fun removeDownloads(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        val next = listDownloads().filterNot { ids.contains(it.downloadId) }
+        db.appSettings().put(AppSettingEntity(KEY_DOWNLOADS, gson.toJson(next)))
     }
 
     suspend fun upsertLocalMusic(items: List<LocalMusicItem>) {
