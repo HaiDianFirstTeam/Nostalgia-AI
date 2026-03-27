@@ -112,6 +112,18 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.rss.RssActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.rss.RssSourceDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.rss.RssItemDetailActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>

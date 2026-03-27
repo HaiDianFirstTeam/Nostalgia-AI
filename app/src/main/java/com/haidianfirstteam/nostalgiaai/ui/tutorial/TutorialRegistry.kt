@@ -6,6 +6,9 @@ import com.haidianfirstteam.nostalgiaai.ui.music.MusicActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.MusicLocalImportActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.MusicLyricsActivity
 import com.haidianfirstteam.nostalgiaai.ui.music.MusicPlayerActivity
+import com.haidianfirstteam.nostalgiaai.ui.rss.RssActivity
+import com.haidianfirstteam.nostalgiaai.ui.rss.RssItemDetailActivity
+import com.haidianfirstteam.nostalgiaai.ui.rss.RssSourceDetailActivity
 import com.haidianfirstteam.nostalgiaai.ui.settings.*
 import com.haidianfirstteam.nostalgiaai.ui.toolbox.ToolboxActivity
 import com.haidianfirstteam.nostalgiaai.ui.translate.TranslateActivity
@@ -48,6 +51,39 @@ object TutorialRegistry {
             is ToolboxActivity -> "toolbox" to listOf(
                 TutorialStep(text = "音乐解析", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
                 TutorialStep(text = "翻译助手", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 1)),
+                TutorialStep(text = "RSS订阅", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 2)),
+            )
+
+            is RssActivity -> "rss" to listOf(
+                TutorialStep(R.id.btnTabRecommended, "推荐：聚合全部订阅内容"),
+                TutorialStep(R.id.btnTabSources, "订阅：订阅源管理"),
+                TutorialStep(R.id.fab, "添加订阅：RSS/Atom 或网页URL自动发现"),
+                TutorialStep(text = "右上角菜单：刷新 / 导入OPML / 导出OPML"),
+                TutorialStep(
+                    text = "推荐-点一条进入文章详情",
+                    finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0),
+                    prepare = { a -> try { a.findViewById<android.view.View>(R.id.btnTabRecommended)?.performClick() } catch (_: Throwable) {} }
+                ),
+                TutorialStep(
+                    text = "订阅源-点一条进入源详情",
+                    finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0),
+                    prepare = { a -> try { a.findViewById<android.view.View>(R.id.btnTabSources)?.performClick() } catch (_: Throwable) {} }
+                ),
+                TutorialStep(
+                    text = "订阅源-更多操作",
+                    finder = TutorialFinders.recyclerChildViewById(R.id.recycler, 0, R.id.btnMore),
+                    prepare = { a -> try { a.findViewById<android.view.View>(R.id.btnTabSources)?.performClick() } catch (_: Throwable) {} }
+                ),
+            )
+
+            is RssSourceDetailActivity -> "rss_source_detail" to listOf(
+                TutorialStep(text = "右上角菜单：刷新 / 源信息"),
+                TutorialStep(text = "点一条进入文章详情", finder = TutorialFinders.recyclerChildAt(R.id.recycler, 0)),
+            )
+
+            is RssItemDetailActivity -> "rss_item_detail" to listOf(
+                TutorialStep(R.id.web, "正文内容（WebView渲染 content:encoded）"),
+                TutorialStep(text = "右上角菜单：复制链接 / 浏览器打开"),
             )
 
             is MusicActivity -> "music" to listOf(

@@ -29,6 +29,18 @@ class ChatPipeline(
         private const val WEB_RESULT_TITLE_MAX_CHARS = 160
         private const val WEB_RESULT_URL_MAX_CHARS = 400
         private const val WEB_RESULT_CONTENT_MAX_CHARS = 600
+
+        // Keep Markdown/LaTeX rendering stable across devices (especially API19).
+        // Intentionally short to reduce token usage.
+        private val RENDERING_OUTPUT_SPEC: String = """
+            输出格式规范（必须严格遵守）：
+            1) 行内数学只能用 $...$，且 $ 内侧禁止空格：正确 $6+4=10$；错误 $ 6+4=10 $。
+            2) 方程组/分段函数必须用块公式并完整闭合：
+               $$\n\\begin{cases}\n...\\\\\n...\n\\end{cases}\n$$
+               禁止缺失 \\end{cases}。
+            3) 禁止使用全角符号（如 ＄｛｝），只能用半角 $ { }。
+            4) Mermaid 必须 fenced code block：```mermaid ... ```。
+        """.trimIndent()
     }
 
     data class Output(
@@ -254,6 +266,10 @@ class ChatPipeline(
 
         fun buildMessages(isMultimodalModel: Boolean): List<OpenAiMessage> {
             val messages = ArrayList<OpenAiMessage>()
+
+            // Always inject rendering spec first.
+            messages.add(OpenAiMessage("system", RENDERING_OUTPUT_SPEC))
+
             if (!webContext.isNullOrBlank()) {
                 // Encourage grounded answers when web search is enabled.
                 messages.add(
@@ -438,6 +454,8 @@ class ChatPipeline(
             val client = OpenAiClient(baseUrl, apiKey)
 
             val messages = ArrayList<OpenAiMessage>()
+            // Always inject rendering spec first.
+            messages.add(OpenAiMessage("system", RENDERING_OUTPUT_SPEC))
             if (!webContext.isNullOrBlank()) {
                 messages.add(
                     OpenAiMessage(
