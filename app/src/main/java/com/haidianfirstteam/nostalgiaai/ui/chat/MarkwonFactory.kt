@@ -446,12 +446,31 @@ object MarkwonFactory {
             }
 
             // Force $...$ to be on its own line for rendering compatibility.
-            // When $...$ is mixed with surrounding text on the same line,
-            // JLatexMathPlugin often fails to render it correctly.
+            // Also extract CJK text from \text{} within $...$ since jlatexmath
+            // cannot render CJK characters in math mode.
             if (s.indexOf('$') >= 0) {
+                // 1) Check if the line is pure $...$ with CJK \text{} that needs extraction
+                val cjkExtracted = extractCjkTextFromMath(s)
+                if (cjkExtracted != null) {
+                    out.addAll(cjkExtracted)
+                    i++
+                    continue
+                }
+
+                // 2) Isolate mixed $...$ from surrounding text
                 val isolated = isolateInlineMath(s)
                 if (isolated != null) {
-                    out.addAll(isolated)
+                    // 3) Check each isolated segment for CJK in \text{}
+                    val outLines = ArrayList<String>()
+                    for (seg in isolated) {
+                        val cjk = extractCjkTextFromMath(seg)
+                        if (cjk != null) {
+                            outLines.addAll(cjk)
+                        } else {
+                            outLines.add(seg)
+                        }
+                    }
+                    out.addAll(outLines)
                     i++
                     continue
                 }
@@ -519,5 +538,58 @@ object MarkwonFactory {
         // Split when the line has non-math content alongside $...$.
         // >= 2 covers: "text $x=1$", "$x=1$ text", and mixed-in cases.
         return if (parts.size >= 2) parts else null
+    }
+
+    /**
+     * Extract CJK text from \text{...} blocks inside $...$ math expressions.
+     * jlatexmath cannot render CJK characters, so we extract them to be
+     * rendered as plain text outside the math block.
+     *
+     * Only processes lines that are purely $...$ (already isolated).
+     * Returns null if no CJK extraction is needed.
+     *
+     * Example: "$n -\text{兔的数量}$" → ["$n -$", "兔的数量"]
+     */
+    private fun extractCjkTextFromMath(line: String): ArrayList<String>? {
+        if (line.isBlank()) return null
+        val trimmed = line.trim()
+        // Only process pure $...$ inline math (not $$...$$, not mixed lines)
+        if (!trimmed.startsWith("$") || !trimmed.endsWith("$")) return null
+        if (trimmed.startsWith("$$")) return null
+
+        val inner = trimmed.substring(1, trimmed.length - 1)
+
+        // Find all \text{...} blocks with CJK content
+        val textCmd = Regex("""\\text\{([^}]*)\}""")
+        val cjkBlocks = textCmd.findAll(inner).filter { m ->
+            m.groupValues[1].any { isCjk(it) }
+        }.toList()
+        if (cjkBlocks.isEmpty()) return null
+
+        // Remove CJK \text{} blocks from math (process reversed to keep indices valid)
+        var mathInner = inner
+        val textParts = ArrayList<String>()
+        for (m in cjkBlocks.reversed()) {
+            textParts.add(0, m.groupValues[1])
+            mathInner = mathInner.substring(0, m.range.first) +
+                        mathInner.substring(m.range.last + 1)
+        }
+        mathInner = mathInner.trim().replace(Regex("""\s{2,}"""), " ")
+
+        val result = ArrayList<String>()
+        if (mathInner.isNotBlank()) {
+            result.add("$${mathInner}$")
+        }
+        for (t in textParts) {
+            if (t.isNotBlank()) result.add(t)
+        }
+        return if (result.isNotEmpty()) result else null
+    }
+
+    /** Check if a character is in a CJK Unicode range. */
+    private fun isCjk(ch: Char): Boolean {
+        val code = ch.code
+        return code in 0x4E00..0x9FFF ||  // CJK Unified Ideographs
+               code in 0x3400..0x4DBF     // Extension A
     }
 }
