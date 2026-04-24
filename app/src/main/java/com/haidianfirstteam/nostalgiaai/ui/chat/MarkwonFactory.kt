@@ -281,9 +281,10 @@ object MarkwonFactory {
                         if (inner.contains("\\begin{cases}") && inner.contains("\\end{cases}")) {
                             inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
                         }
-                        out.add("$$")
+                        // Wrap display math in a visible block (not $$ which relies on unreliable JLatexMathPlugin)
+                        out.add("```")
                         if (inner.isNotBlank()) out.add(inner)
-                        out.add("$$")
+                        out.add("```")
                         i = j + 1
                         continue
                     }
@@ -376,9 +377,9 @@ object MarkwonFactory {
                     }
                     // Tolerate user writing `\2x` as a newline in cases.
                     inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
-                    out.add("$$")
+                    out.add("```")
                     out.add(inner)
-                    out.add("$$")
+                    out.add("```")
                     i = j + 1
                     continue
                 }
@@ -388,9 +389,9 @@ object MarkwonFactory {
             if (trimmed.contains("\\begin{cases}") && trimmed.contains("\\end{cases}")) {
                 var inner = normalizeLatex(trimmed)
                 inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
-                out.add("$$")
+                out.add("```")
                 out.add(inner)
-                out.add("$$")
+                out.add("```")
                 i++
                 continue
             }
@@ -445,35 +446,11 @@ object MarkwonFactory {
                 }
             }
 
-            // Force $...$ to be on its own line for rendering compatibility.
-            // Also extract CJK text from \text{} within $...$ since jlatexmath
-            // cannot render CJK characters in math mode.
+            // Replace $...$ with inline code for guaranteed rendering.
+            // JLatexMathPlugin is unreliable on Android 4.4 (font/library compat),
+            // so we convert to standard markdown inline code `...` instead.
             if (s.indexOf('$') >= 0) {
-                // 1) Check if the line is pure $...$ with CJK \text{} that needs extraction
-                val cjkExtracted = extractCjkTextFromMath(s)
-                if (cjkExtracted != null) {
-                    out.addAll(cjkExtracted)
-                    i++
-                    continue
-                }
-
-                // 2) Isolate mixed $...$ from surrounding text
-                val isolated = isolateInlineMath(s)
-                if (isolated != null) {
-                    // 3) Check each isolated segment for CJK in \text{}
-                    val outLines = ArrayList<String>()
-                    for (seg in isolated) {
-                        val cjk = extractCjkTextFromMath(seg)
-                        if (cjk != null) {
-                            outLines.addAll(cjk)
-                        } else {
-                            outLines.add(seg)
-                        }
-                    }
-                    out.addAll(outLines)
-                    i++
-                    continue
-                }
+                s = replaceInlineMathWithCode(s)
             }
 
             out.add(s)
@@ -507,89 +484,21 @@ object MarkwonFactory {
     }
 
     /**
-     * If a line contains $...$ mixed with non-math text on the same line,
-     * split it so each $...$ expression stands on its own line.
-     * Returns null if no splitting is needed (line is already clean).
+     * Replace $...$ inline math with markdown inline code `...` for reliable rendering.
+     * Also normalizes common LaTeX bracket forms: \(...\) → `...`.
      *
      * Only matches single-dollar inline math ($...$), not display math ($$...$$).
-     * This is a compatibility enforcement: JLatexMathPlugin renders more reliably
-     * when $...$ is isolated on its own line.
+     * Avoids replacing currency amounts (e.g. "$5") by checking for math-like tokens.
      */
-    private fun isolateInlineMath(line: String): ArrayList<String>? {
-        if (line.isBlank()) return null
-        val pattern = Regex("""\$(?!\$)([^$\n]+?)\$(?!\$)""")
-        val matches = pattern.findAll(line).toList()
-        if (matches.isEmpty()) return null
-
-        val parts = ArrayList<String>()
-        var lastEnd = 0
-        for (m in matches) {
-            if (m.range.first > lastEnd) {
-                val before = line.substring(lastEnd, m.range.first)
-                if (before.isNotBlank()) parts.add(before)
-            }
-            parts.add(m.value)
-            lastEnd = m.range.last + 1
+    private fun replaceInlineMathWithCode(line: String): String {
+        val pattern = Regex("""(?<!\$)\$([^$\n]+?)\$(?!\$)""")
+        return pattern.replace(line) { m ->
+            val inner = m.groupValues[1].trim()
+            if (inner.isBlank()) return@replace m.value
+            // Heuristics: only convert if it looks like math (has math tokens).
+            // This avoids converting currency like "$5" or "$100".
+            val looksLikeMath = inner.any { it in listOf('^', '_', '=', '+', '-', '*', '/', '{', '}', '\\', '(', ')', '<', '>', '∑', '∫', '∞', '√', '±', '≈', '≠', '≤', '≥', 'α', 'β', 'γ', 'θ', 'π', 'λ', 'μ', 'Δ', 'Φ', 'Ω') }
+            if (looksLikeMath) " `$inner` " else m.value
         }
-        if (lastEnd < line.length) {
-            val after = line.substring(lastEnd)
-            if (after.isNotBlank()) parts.add(after)
-        }
-        // Split when the line has non-math content alongside $...$.
-        // >= 2 covers: "text $x=1$", "$x=1$ text", and mixed-in cases.
-        return if (parts.size >= 2) parts else null
-    }
-
-    /**
-     * Extract CJK text from \text{...} blocks inside $...$ math expressions.
-     * jlatexmath cannot render CJK characters, so we extract them to be
-     * rendered as plain text outside the math block.
-     *
-     * Only processes lines that are purely $...$ (already isolated).
-     * Returns null if no CJK extraction is needed.
-     *
-     * Example: "$n -\text{兔的数量}$" → ["$n -$", "兔的数量"]
-     */
-    private fun extractCjkTextFromMath(line: String): ArrayList<String>? {
-        if (line.isBlank()) return null
-        val trimmed = line.trim()
-        // Only process pure $...$ inline math (not $$...$$, not mixed lines)
-        if (!trimmed.startsWith("$") || !trimmed.endsWith("$")) return null
-        if (trimmed.startsWith("$$")) return null
-
-        val inner = trimmed.substring(1, trimmed.length - 1)
-
-        // Find all \text{...} blocks with CJK content
-        val textCmd = Regex("""\\text\{([^}]*)\}""")
-        val cjkBlocks = textCmd.findAll(inner).filter { m ->
-            m.groupValues[1].any { isCjk(it) }
-        }.toList()
-        if (cjkBlocks.isEmpty()) return null
-
-        // Remove CJK \text{} blocks from math (process reversed to keep indices valid)
-        var mathInner = inner
-        val textParts = ArrayList<String>()
-        for (m in cjkBlocks.reversed()) {
-            textParts.add(0, m.groupValues[1])
-            mathInner = mathInner.substring(0, m.range.first) +
-                        mathInner.substring(m.range.last + 1)
-        }
-        mathInner = mathInner.trim().replace(Regex("""\s{2,}"""), " ")
-
-        val result = ArrayList<String>()
-        if (mathInner.isNotBlank()) {
-            result.add("$${mathInner}$")
-        }
-        for (t in textParts) {
-            if (t.isNotBlank()) result.add(t)
-        }
-        return if (result.isNotEmpty()) result else null
-    }
-
-    /** Check if a character is in a CJK Unicode range. */
-    private fun isCjk(ch: Char): Boolean {
-        val code = ch.code
-        return code in 0x4E00..0x9FFF ||  // CJK Unified Ideographs
-               code in 0x3400..0x4DBF     // Extension A
     }
 }

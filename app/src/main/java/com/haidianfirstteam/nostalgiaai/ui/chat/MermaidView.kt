@@ -184,7 +184,11 @@ class MermaidView @JvmOverloads constructor(
         val night = (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES)
         // Basic contrast for the scale label.
         tvScale.setTextColor(if (night) Color.parseColor("#DDDDDD") else Color.parseColor("#555555"))
-        val key = (if (night) "dark:" else "light:") + mermaidCode.hashCode().toString()
+
+        // Preprocess: add quotes around node labels with special characters
+        val fixedCode = fixMermaidLabels(mermaidCode)
+
+        val key = (if (night) "dark:" else "light:") + fixedCode.hashCode().toString()
         if (key == lastKey) return
         lastKey = key
 
@@ -198,9 +202,40 @@ class MermaidView @JvmOverloads constructor(
         scale = 1.0f
         tvScale.text = "100%"
 
-        val html = buildHtml(mermaidCode, night)
+        val html = buildHtml(fixedCode, night)
         // Use assets base URL so <script src="mermaid/mermaid.min.js"> resolves.
         webView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null)
+    }
+
+    /**
+     * Fix Mermaid flowchart node labels that contain special characters (like parentheses,
+     * arithmetic operators) which confuse Mermaid's PEG parser.
+     *
+     * Wraps unquoted [label] in ["label"] when the label contains `()`, `*`, `/`, `+`, `-`, `=`.
+     * This tells Mermaid to treat the content as literal text.
+     *
+     * Example:
+     *   B->C[计算：y=(F-2*H)/2]    →   B->C["计算：y=(F-2*H)/2"]
+     */
+    private fun fixMermaidLabels(code: String): String {
+        // Pattern: unquoted [label] where label contains special characters
+        val special = Regex("""\[([^"]*?[()*/=+\-][^"]*?)]""")
+        return code.lines().joinToString("\n") { line ->
+            val trimmed = line.trimStart()
+            // Skip header/directive lines (graph, flowchart, subgraph)
+            if (trimmed.startsWith("graph ") || trimmed.startsWith("flowchart ") || trimmed.startsWith("subgraph ")) {
+                return@joinToString line
+            }
+            special.replace(line) { m ->
+                val content = m.groupValues[1]
+                // Avoid double-quoting (already has quotes)
+                if (content.startsWith("\"") && content.endsWith("\"")) {
+                    m.value
+                } else {
+                    "[\"$content\"]"
+                }
+            }
+        }
     }
 
     private fun buildHtml(code: String, dark: Boolean): String {
