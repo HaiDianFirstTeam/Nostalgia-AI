@@ -34,10 +34,17 @@ class ChatPipeline(
         // Intentionally short to reduce token usage.
         private val RENDERING_OUTPUT_SPEC: String = """
             输出格式规范（必须严格遵守）：
-            1) 行内数学只能用 $...$，且 $ 内侧禁止空格：正确 $6+4=10$；错误 $ 6+4=10 $。
-            2) 方程组/分段函数必须用块公式并完整闭合：
-               $$\n\\begin{cases}\n...\\\\\n...\n\\end{cases}\n$$
-               禁止缺失 \\end{cases}。
+            1) 行内数学只能用 $...$，且 $ 内侧禁止空格。关键：$...$ 必须独占一行，左右不得有任何其他文字。
+               错误示例（禁止）：已知$x=1$是对的。
+               正确示例：
+                 公式是：
+                 $...$
+                 然后...
+               或：
+                 已知
+                 $x=1$
+                 是对的
+            2) 方程组/分段函数必须用块公式并完整闭合。
             3) 禁止使用全角符号（如 ＄｛｝），只能用半角 $ { }。
             4) Mermaid 必须 fenced code block：```mermaid ... ```。
         """.trimIndent()

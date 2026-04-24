@@ -12,6 +12,7 @@ import com.haidianfirstteam.nostalgiaai.R
 import com.haidianfirstteam.nostalgiaai.data.SettingsRepository
 import com.haidianfirstteam.nostalgiaai.ui.MainActivity
 import com.haidianfirstteam.nostalgiaai.ui.tutorial.TutorialPrefs
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -47,6 +48,23 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
         findPreference<Preference>("import_export")?.setOnPreferenceClickListener {
             startActivity(ImportExportActivity.newIntent(requireContext()))
+            true
+        }
+
+        findPreference<Preference>("clear_chat_history")?.setOnPreferenceClickListener {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("确认清空")
+                .setMessage("确定要清空所有聊天记录吗？此操作不可撤销。")
+                .setPositiveButton("清空") { _, _ ->
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        app.db.attachments().deleteAll()
+                        app.db.messages().deleteAll()
+                        app.db.conversations().deleteAll()
+                    }
+                    android.widget.Toast.makeText(requireContext(), "已清空聊天记录", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("取消", null)
+                .show()
             true
         }
 

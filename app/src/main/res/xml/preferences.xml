@@ -57,6 +57,11 @@
             android:summary="重新显示各页面的聚光灯引导" />
 
         <Preference
+            android:key="clear_chat_history"
+            android:title="清空聊天记录"
+            android:summary="删除所有对话和消息记录" />
+
+        <Preference
             android:key="about"
             android:title="关于" />
     </PreferenceCategory>

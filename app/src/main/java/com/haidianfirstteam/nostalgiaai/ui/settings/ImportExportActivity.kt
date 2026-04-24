@@ -78,14 +78,14 @@ class ImportExportActivity : BaseActivity() {
             return cb
         }
 
-        addCb("Providers", ImportExportRepository.Section.PROVIDERS)
-        addCb("API Keys", ImportExportRepository.Section.API_KEYS)
-        addCb("Models", ImportExportRepository.Section.MODELS)
-        addCb("Model Groups", ImportExportRepository.Section.MODEL_GROUPS)
-        addCb("Group Providers(顺序)", ImportExportRepository.Section.GROUP_ROUTES)
+        addCb("Provider", ImportExportRepository.Section.PROVIDERS)
+        addCb("API 密钥", ImportExportRepository.Section.API_KEYS)
+        addCb("模型", ImportExportRepository.Section.MODELS)
+        addCb("模型组", ImportExportRepository.Section.MODEL_GROUPS)
+        addCb("组 Provider 顺序", ImportExportRepository.Section.GROUP_ROUTES)
         addCb("Tavily", ImportExportRepository.Section.TAVILY)
-        addCb("Settings", ImportExportRepository.Section.SETTINGS)
-        addCb("History (Conversations+Messages)", ImportExportRepository.Section.CONVERSATIONS)
+        addCb("设置", ImportExportRepository.Section.SETTINGS)
+        addCb("历史记录（对话+消息）", ImportExportRepository.Section.CONVERSATIONS)
 
         MaterialAlertDialogBuilder(this)
             .setTitle("选择导出内容")
