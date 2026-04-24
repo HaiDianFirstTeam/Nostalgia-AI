@@ -445,6 +445,18 @@ object MarkwonFactory {
                 }
             }
 
+            // Force $...$ to be on its own line for rendering compatibility.
+            // When $...$ is mixed with surrounding text on the same line,
+            // JLatexMathPlugin often fails to render it correctly.
+            if (s.indexOf('$') >= 0) {
+                val isolated = isolateInlineMath(s)
+                if (isolated != null) {
+                    out.addAll(isolated)
+                    i++
+                    continue
+                }
+            }
+
             out.add(s)
             i++
         }
@@ -473,5 +485,39 @@ object MarkwonFactory {
         }
 
         return out.joinToString("\n")
+    }
+
+    /**
+     * If a line contains $...$ mixed with non-math text on the same line,
+     * split it so each $...$ expression stands on its own line.
+     * Returns null if no splitting is needed (line is already clean).
+     *
+     * Only matches single-dollar inline math ($...$), not display math ($$...$$).
+     * This is a compatibility enforcement: JLatexMathPlugin renders more reliably
+     * when $...$ is isolated on its own line.
+     */
+    private fun isolateInlineMath(line: String): ArrayList<String>? {
+        if (line.isBlank()) return null
+        val pattern = Regex("""\$(?!\$)([^$\n]+?)\$(?!\$)""")
+        val matches = pattern.findAll(line).toList()
+        if (matches.isEmpty()) return null
+
+        val parts = ArrayList<String>()
+        var lastEnd = 0
+        for (m in matches) {
+            if (m.range.first > lastEnd) {
+                val before = line.substring(lastEnd, m.range.first)
+                if (before.isNotBlank()) parts.add(before)
+            }
+            parts.add(m.value)
+            lastEnd = m.range.last + 1
+        }
+        if (lastEnd < line.length) {
+            val after = line.substring(lastEnd)
+            if (after.isNotBlank()) parts.add(after)
+        }
+        // Split when the line has non-math content alongside $...$.
+        // >= 2 covers: "text $x=1$", "$x=1$ text", and mixed-in cases.
+        return if (parts.size >= 2) parts else null
     }
 }
