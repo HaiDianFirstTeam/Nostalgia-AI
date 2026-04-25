@@ -474,6 +474,21 @@ object MarkwonFactory {
             i++
         }
 
+        // Deduplicate consecutive "$$" lines that arise when multi-line math
+        // handlers (cases, \[...\]) add their own delimiters on top of existing
+        // $$...$$ in the original input, yielding broken "$$\n$$\n...\n$$\n$$"
+        // sequences that JLatexMathPlugin cannot parse correctly.
+        var prevIsDollar = false
+        val deduped = ArrayList<String>(out.size)
+        for (line in out) {
+            val isDollar = line.trim() == "$$"
+            if (isDollar && prevIsDollar) continue
+            deduped.add(line)
+            prevIsDollar = isDollar
+        }
+        out.clear()
+        out.addAll(deduped)
+
         // Append footnotes section (only those referenced or defined).
         if (footnoteDefs.isNotEmpty() && (footnoteOrder.isNotEmpty() || footnoteDefs.isNotEmpty())) {
             out.add("")

@@ -259,8 +259,13 @@ class MessageAdapter(
                 b.chipsContainer.removeAllViews()
             }
 
+            // Display math extraction (rendered separately via KaTeX WebView)
+            val mathParsed = extractDisplayMath(item.content)
+            val mathExpressions = mathParsed.expressions
+            renderMath(b, mathExpressions)
+
             // Mermaid extraction (rendered separately via WebView)
-            val parsed = extractMermaidBlocks(item.content)
+            val parsed = extractMermaidBlocks(mathParsed.text)
             val mermaids = parsed.diagrams
             renderMermaids(b, mermaids)
 
@@ -281,7 +286,7 @@ class MessageAdapter(
                 b.tvThinking.visibility = View.GONE
             }
 
-            // Markdown render (mermaid blocks removed)
+            // Markdown render (math + mermaid blocks removed)
                 val contentForMarkdown = parsed.text
                 if (contentForMarkdown.isBlank()) {
                 // Avoid showing an ever-growing empty bubble during streaming
@@ -322,7 +327,9 @@ class MessageAdapter(
                         combined.append(st.pending.toString())
                         b.tvContent.text = combined
 
-                        // During streaming, do not render Mermaid WebViews (too heavy).
+                        // During streaming, do not render Math or Mermaid WebViews (too heavy).
+                        b.mathContainer.visibility = View.GONE
+                        b.mathContainer.removeAllViews()
                         b.mermaidContainer.visibility = View.GONE
                         b.mermaidContainer.removeAllViews()
                     } else {
@@ -353,6 +360,11 @@ class MessageAdapter(
     private data class MermaidParsed(
         val text: String,
         val diagrams: List<String>
+    )
+
+    private data class MathParsed(
+        val text: String,
+        val expressions: List<String>
     )
 
     private fun extractMermaidBlocks(markdown: String): MermaidParsed {
@@ -400,6 +412,79 @@ class MessageAdapter(
         }
 
         return MermaidParsed(out.joinToString("\n").trim(), diagrams)
+    }
+
+    /**
+     * Extract display math blocks ($$...$$, \[...\]) from markdown.
+     * Returns the text with math blocks removed (replaced by spaces/newlines)
+     * and a list of LaTeX expressions.
+     *
+     * Math inside fenced code blocks is NOT extracted (those fences are respected).
+     */
+    private fun extractDisplayMath(markdown: String): MathParsed {
+        if (markdown.isBlank()) return MathParsed(markdown, emptyList())
+        val expressions = ArrayList<String>()
+
+        // Regex: $$...$$ or \[...\] (multi-line supported)
+        val regex = Regex("""\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]""")
+
+        val sb = StringBuilder()
+        var lastEnd = 0
+        for (match in regex.findAll(markdown)) {
+            // Text before this math block
+            sb.append(markdown.substring(lastEnd, match.range.first))
+
+            val content = match.value
+            val latex = when {
+                content.startsWith("$$") -> content.substring(2, content.length - 2).trim()
+                content.startsWith("\\[") -> content.substring(2, content.length - 2).trim()
+                else -> content.trim()
+            }
+            expressions.add(latex)
+
+            // Preserve newlines to keep line count consistent
+            val newlines = content.count { it == '\n' }
+            if (newlines > 0) {
+                sb.append('\n'.repeat(newlines))
+            }
+            sb.append(' ')
+
+            lastEnd = match.range.last + 1
+        }
+        sb.append(markdown.substring(lastEnd))
+
+        return MathParsed(sb.toString().trim(), expressions)
+    }
+
+    private fun renderMath(b: ItemMessageAiBinding, expressions: List<String>) {
+        if (expressions.isEmpty()) {
+            b.mathContainer.visibility = View.GONE
+            b.mathContainer.removeAllViews()
+            return
+        }
+        b.mathContainer.visibility = View.VISIBLE
+
+        // Reuse existing MathWebView instances when possible.
+        while (b.mathContainer.childCount > expressions.size) {
+            b.mathContainer.removeViewAt(b.mathContainer.childCount - 1)
+        }
+        while (b.mathContainer.childCount < expressions.size) {
+            val mv = MathWebView(b.root.context)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.topMargin = (4f * b.root.resources.displayMetrics.density).toInt()
+            mv.layoutParams = lp
+            b.mathContainer.addView(mv)
+        }
+
+        for (idx in expressions.indices) {
+            val v = b.mathContainer.getChildAt(idx)
+            if (v is MathWebView) {
+                v.setLatex(expressions[idx])
+            }
+        }
     }
 
     private fun renderMermaids(b: ItemMessageAiBinding, diagrams: List<String>) {

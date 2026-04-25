@@ -205,10 +205,77 @@ tasks.register("downloadMermaid") {
     }
 }
 
+// --- KaTeX asset (for markdown display math rendering via WebView) ---
+// We keep katex.min.js and katex.min.css out of git (large) and download them during build.
+// These are used by MathWebView to render LaTeX $$...$$ and \[...\] blocks.
+def katexVersion = "0.12.0"
+def katexJsUrl = "https://unpkg.com/katex@${katexVersion}/dist/katex.min.js"
+def katexCssUrl = "https://unpkg.com/katex@${katexVersion}/dist/katex.min.css"
+def katexAssetDir = file("$projectDir/src/main/assets/katex")
+def katexJsOut = file("$katexAssetDir/katex.min.js")
+def katexCssOut = file("$katexAssetDir/katex.min.css")
+
+tasks.register("downloadKatex") {
+    outputs.files(katexJsOut, katexCssOut)
+    doLast {
+        if (katexJsOut.exists() && katexJsOut.length() > 100_000 && katexCssOut.exists() && katexCssOut.length() > 5_000) {
+            // already downloaded
+            return
+        }
+        katexAssetDir.mkdirs()
+
+        // Download JS
+        def jsTmp = file("$buildDir/tmp/katex.min.js")
+        jsTmp.parentFile.mkdirs()
+        def downloadJs = {
+            println("Downloading katex.min.js from: ${katexJsUrl}")
+            new URL(katexJsUrl).withInputStream { ins ->
+                jsTmp.withOutputStream { out -> out << ins }
+            }
+            if (!jsTmp.exists() || jsTmp.length() < 100_000) {
+                throw new GradleException("Downloaded katex.min.js is too small: ${jsTmp.length()} bytes")
+            }
+            katexJsOut.bytes = jsTmp.bytes
+            println("Saved katex.min.js to: ${katexJsOut} (${katexJsOut.length()} bytes)")
+        }
+
+        // Download CSS
+        def cssTmp = file("$buildDir/tmp/katex.min.css")
+        cssTmp.parentFile.mkdirs()
+        def downloadCss = {
+            println("Downloading katex.min.css from: ${katexCssUrl}")
+            new URL(katexCssUrl).withInputStream { ins ->
+                cssTmp.withOutputStream { out -> out << ins }
+            }
+            if (!cssTmp.exists() || cssTmp.length() < 5_000) {
+                throw new GradleException("Downloaded katex.min.css is too small: ${cssTmp.length()} bytes")
+            }
+            katexCssOut.bytes = cssTmp.bytes
+            println("Saved katex.min.css to: ${katexCssOut} (${katexCssOut.length()} bytes)")
+        }
+
+        try {
+            downloadJs()
+        } catch (Throwable t) {
+            println("KaTeX JS download failed: ${t.message}")
+            throw t
+        }
+
+        try {
+            downloadCss()
+        } catch (Throwable t) {
+            println("KaTeX CSS download failed: ${t.message}")
+            throw t
+        }
+    }
+}
+
 // Ensure assets exist before build.
 preBuild.dependsOn(tasks.named("downloadMermaid"))
+preBuild.dependsOn(tasks.named("downloadKatex"))
 tasks.matching { it.name == "preReleaseBuild" || it.name == "preDebugBuild" }.configureEach {
     dependsOn(tasks.named("downloadMermaid"))
+    dependsOn(tasks.named("downloadKatex"))
 }
 
 def computeVersionName() {
