@@ -281,10 +281,10 @@ object MarkwonFactory {
                         if (inner.contains("\\begin{cases}") && inner.contains("\\end{cases}")) {
                             inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
                         }
-                        // Wrap display math in a visible block (not $$ which relies on unreliable JLatexMathPlugin)
-                        out.add("```")
+                        // Wrap display math in $$...$$ for JLatexMathPlugin rendering
+                        out.add("\$\$")
                         if (inner.isNotBlank()) out.add(inner)
-                        out.add("```")
+                        out.add("\$\$")
                         i = j + 1
                         continue
                     }
@@ -377,9 +377,9 @@ object MarkwonFactory {
                     }
                     // Tolerate user writing `\2x` as a newline in cases.
                     inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
-                    out.add("```")
+                    out.add("\$\$")
                     out.add(inner)
-                    out.add("```")
+                    out.add("\$\$")
                     i = j + 1
                     continue
                 }
@@ -389,9 +389,9 @@ object MarkwonFactory {
             if (trimmed.contains("\\begin{cases}") && trimmed.contains("\\end{cases}")) {
                 var inner = normalizeLatex(trimmed)
                 inner = inner.replace(Regex("\\\\(?=\\d)"), "\\\\\\\\")
-                out.add("```")
+                out.add("\$\$")
                 out.add(inner)
-                out.add("```")
+                out.add("\$\$")
                 i++
                 continue
             }
