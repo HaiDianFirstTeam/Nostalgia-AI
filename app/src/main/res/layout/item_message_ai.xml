@@ -87,20 +87,23 @@
 			android:textColor="?android:attr/textColorSecondary" />
 	</LinearLayout>
 
+	<!-- contentContainer: mixed text + display math segments in correct order -->
+	<LinearLayout
+		android:id="@+id/contentContainer"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:layout_marginTop="2dp"
+		android:background="@drawable/bg_bubble_ai"
+		android:orientation="vertical" />
+
+	<!-- tvContent: only visible during streaming (hidden for final rendered content) -->
 	<TextView
 		android:id="@+id/tvContent"
 		android:layout_width="wrap_content"
 		android:layout_height="wrap_content"
 		android:layout_marginTop="2dp"
 		android:background="@drawable/bg_bubble_ai"
-		android:textColor="?android:attr/textColorPrimary" />
-
-	<LinearLayout
-		android:id="@+id/mathContainer"
-		android:layout_width="match_parent"
-		android:layout_height="wrap_content"
-		android:layout_marginTop="2dp"
-		android:orientation="vertical"
+		android:textColor="?android:attr/textColorPrimary"
 		android:visibility="gone" />
 
 	<LinearLayout

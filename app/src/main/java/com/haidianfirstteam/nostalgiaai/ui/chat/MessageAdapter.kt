@@ -259,13 +259,8 @@ class MessageAdapter(
                 b.chipsContainer.removeAllViews()
             }
 
-            // Display math extraction (rendered separately via KaTeX WebView)
-            val mathParsed = extractDisplayMath(item.content)
-            val mathExpressions = mathParsed.expressions
-            renderMath(b, mathExpressions)
-
             // Mermaid extraction (rendered separately via WebView)
-            val parsed = extractMermaidBlocks(mathParsed.text)
+            val parsed = extractMermaidBlocks(item.content)
             val mermaids = parsed.diagrams
             renderMermaids(b, mermaids)
 
@@ -286,56 +281,60 @@ class MessageAdapter(
                 b.tvThinking.visibility = View.GONE
             }
 
-            // Markdown render (math + mermaid blocks removed)
-                val contentForMarkdown = parsed.text
+            // Main content: text with display math ($$...$$ / \[...\]) inline via KaTeX
+            val contentForMarkdown = parsed.text
+            val sid = streamingMessageId
+            if (sid != null && item.id == sid) {
+                // Streaming: show tvContent with incremental rendering
+                b.contentContainer.visibility = View.GONE
+                b.contentContainer.removeAllViews()
+                b.mermaidContainer.visibility = View.GONE
+                b.mermaidContainer.removeAllViews()
+
                 if (contentForMarkdown.isBlank()) {
-                // Avoid showing an ever-growing empty bubble during streaming
-                b.tvContent.visibility = View.GONE
-                b.tvContent.text = ""
+                    b.tvContent.visibility = View.GONE
+                    b.tvContent.text = ""
                 } else {
                     b.tvContent.visibility = View.VISIBLE
-                    val sid = streamingMessageId
-                    if (sid != null && item.id == sid) {
-                        // Streaming bubble: true incremental render.
-                        // Render only "safe" completed chunks so we don't break multi-line constructs
-                        // (e.g. \[ ... \], \begin{cases} ... \end{cases}, fenced code blocks).
-                        val st = streamingStates.getOrPut(item.id) { StreamingMdState() }
-                        val prev = st.fullText
-                        val next = contentForMarkdown
-                        if (prev.isNotEmpty() && !next.startsWith(prev)) {
-                            // Non-append update: reset.
-                            st.fullText = ""
-                            st.rendered = SpannableStringBuilder()
-                            st.pending = StringBuilder()
-                        }
-                        val appended = if (next.length >= prev.length) next.substring(prev.length) else next
-                        st.fullText = next
-                        st.pending.append(appended)
 
-                        // Consume as many safe chunks as possible.
-                        while (true) {
-                            val cut = findSafeChunkEnd(st.pending)
-                            if (cut <= 0) break
-                            val chunk = st.pending.substring(0, cut)
-                            val sp = markwon.toMarkdown(chunk)
-                            st.rendered.append(sp)
-                            st.pending.delete(0, cut)
-                        }
-
-                        val combined = SpannableStringBuilder()
-                        combined.append(st.rendered)
-                        combined.append(st.pending.toString())
-                        b.tvContent.text = combined
-
-                        // During streaming, do not render Math or Mermaid WebViews (too heavy).
-                        b.mathContainer.visibility = View.GONE
-                        b.mathContainer.removeAllViews()
-                        b.mermaidContainer.visibility = View.GONE
-                        b.mermaidContainer.removeAllViews()
-                    } else {
-                        markwon.setMarkdown(b.tvContent, contentForMarkdown)
+                    val st = streamingStates.getOrPut(item.id) { StreamingMdState() }
+                    val prev = st.fullText
+                    val next = contentForMarkdown
+                    if (prev.isNotEmpty() && !next.startsWith(prev)) {
+                        st.fullText = ""
+                        st.rendered = SpannableStringBuilder()
+                        st.pending = StringBuilder()
                     }
+                    val appended = if (next.length >= prev.length) next.substring(prev.length) else next
+                    st.fullText = next
+                    st.pending.append(appended)
+
+                    while (true) {
+                        val cut = findSafeChunkEnd(st.pending)
+                        if (cut <= 0) break
+                        val chunk = st.pending.substring(0, cut)
+                        val sp = markwon.toMarkdown(chunk)
+                        st.rendered.append(sp)
+                        st.pending.delete(0, cut)
+                    }
+
+                    val combined = SpannableStringBuilder()
+                    combined.append(st.rendered)
+                    combined.append(st.pending.toString())
+                    b.tvContent.text = combined
                 }
+            } else {
+                // Non-streaming: build segmented content with inline math
+                b.tvContent.visibility = View.GONE
+                b.tvContent.text = ""
+
+                if (contentForMarkdown.isBlank()) {
+                    b.contentContainer.visibility = View.GONE
+                } else {
+                    val segments = segmentContent(contentForMarkdown)
+                    renderContent(b, segments)
+                }
+            }
 
             if (item.branchEnabled && item.branchTotal > 1) {
                 b.branchBar.visibility = View.VISIBLE
@@ -362,10 +361,10 @@ class MessageAdapter(
         val diagrams: List<String>
     )
 
-    private data class MathParsed(
-        val text: String,
-        val expressions: List<String>
-    )
+    private sealed class MessageSegment {
+        data class Text(val content: String) : MessageSegment()
+        data class Math(val latex: String) : MessageSegment()
+    }
 
     private fun extractMermaidBlocks(markdown: String): MermaidParsed {
         if (markdown.isBlank()) return MermaidParsed(markdown, emptyList())
@@ -415,74 +414,75 @@ class MessageAdapter(
     }
 
     /**
-     * Extract display math blocks ($$...$$, \[...\]) from markdown.
-     * Returns the text with math blocks removed (replaced by spaces/newlines)
-     * and a list of LaTeX expressions.
-     *
-     * Math inside fenced code blocks is NOT extracted (those fences are respected).
+     * Split markdown text into a list of [MessageSegment]s at display math boundaries
+     * ($$...$$, \[...\]). Regular text becomes [MessageSegment.Text] and math blocks
+     * become [MessageSegment.Math], preserving original order.
      */
-    private fun extractDisplayMath(markdown: String): MathParsed {
-        if (markdown.isBlank()) return MathParsed(markdown, emptyList())
-        val expressions = ArrayList<String>()
-
-        // Regex: $$...$$ or \[...\] (multi-line supported)
+    private fun segmentContent(markdown: String): List<MessageSegment> {
+        if (markdown.isBlank()) return emptyList()
         val regex = Regex("""\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]""")
-
-        val sb = StringBuilder()
+        val segments = ArrayList<MessageSegment>()
         var lastEnd = 0
         for (match in regex.findAll(markdown)) {
-            // Text before this math block
-            sb.append(markdown.substring(lastEnd, match.range.first))
-
+            val before = markdown.substring(lastEnd, match.range.first)
+            if (before.isNotBlank()) {
+                segments.add(MessageSegment.Text(before))
+            }
             val content = match.value
             val latex = when {
                 content.startsWith("$$") -> content.substring(2, content.length - 2).trim()
                 content.startsWith("\\[") -> content.substring(2, content.length - 2).trim()
                 else -> content.trim()
             }
-            expressions.add(latex)
-
-            // Preserve newlines to keep line count consistent
-            val newlines = content.count { it == '\n' }
-            if (newlines > 0) {
-                sb.append("\n".repeat(newlines))
-            }
-            sb.append(' ')
-
+            segments.add(MessageSegment.Math(latex))
             lastEnd = match.range.last + 1
         }
-        sb.append(markdown.substring(lastEnd))
-
-        return MathParsed(sb.toString().trim(), expressions)
+        val after = markdown.substring(lastEnd)
+        if (after.isNotBlank()) {
+            segments.add(MessageSegment.Text(after))
+        }
+        return segments
     }
 
-    private fun renderMath(b: ItemMessageAiBinding, expressions: List<String>) {
-        if (expressions.isEmpty()) {
-            b.mathContainer.visibility = View.GONE
-            b.mathContainer.removeAllViews()
+    private fun renderContent(b: ItemMessageAiBinding, segments: List<MessageSegment>) {
+        val container = b.contentContainer
+        container.removeAllViews()
+
+        if (segments.isEmpty()) {
+            container.visibility = View.GONE
             return
         }
-        b.mathContainer.visibility = View.VISIBLE
 
-        // Reuse existing MathWebView instances when possible.
-        while (b.mathContainer.childCount > expressions.size) {
-            b.mathContainer.removeViewAt(b.mathContainer.childCount - 1)
-        }
-        while (b.mathContainer.childCount < expressions.size) {
-            val mv = MathWebView(b.root.context)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            lp.topMargin = (4f * b.root.resources.displayMetrics.density).toInt()
-            mv.layoutParams = lp
-            b.mathContainer.addView(mv)
-        }
+        container.visibility = View.VISIBLE
 
-        for (idx in expressions.indices) {
-            val v = b.mathContainer.getChildAt(idx)
-            if (v is MathWebView) {
-                v.setLatex(expressions[idx])
+        // Resolve theme text color for Text segment TextViews
+        val ta = b.root.context.obtainStyledAttributes(intArrayOf(android.R.attr.textColorPrimary))
+        val textColor = ta.getColor(0, 0xFF000000.toInt())
+        ta.recycle()
+
+        for (segment in segments) {
+            when (segment) {
+                is MessageSegment.Text -> {
+                    val tv = android.widget.TextView(b.root.context)
+                    tv.layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    tv.setTextColor(textColor)
+                    markwon.setMarkdown(tv, segment.content)
+                    container.addView(tv)
+                }
+                is MessageSegment.Math -> {
+                    val mv = MathWebView(b.root.context)
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    lp.topMargin = (4f * b.root.resources.displayMetrics.density).toInt()
+                    mv.layoutParams = lp
+                    mv.setLatex(segment.latex)
+                    container.addView(mv)
+                }
             }
         }
     }
@@ -553,6 +553,7 @@ class MessageAdapter(
         var inFence: String? = null
         var latexBlock = 0
         var casesBlock = 0
+        var inDollarBlock = false
         var lastSafe = -1
 
         var lineStart = 0
@@ -584,9 +585,13 @@ class MessageAdapter(
                     casesBlock += countOccurrences(line, "\\begin{cases}")
                     casesBlock -= countOccurrences(line, "\\end{cases}")
                     if (casesBlock < 0) casesBlock = 0
+
+                    // Track $$...$$ across lines (each occurrence toggles)
+                    val dollarCount = countOccurrences(line, "$$")
+                    if (dollarCount % 2 == 1) inDollarBlock = !inDollarBlock
                 }
 
-                if (inFence == null && latexBlock == 0 && casesBlock == 0) {
+                if (inFence == null && latexBlock == 0 && casesBlock == 0 && !inDollarBlock) {
                     lastSafe = i + 1
                 }
 
