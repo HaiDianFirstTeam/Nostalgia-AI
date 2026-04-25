@@ -446,16 +446,16 @@ object MarkwonFactory {
                 }
             }
 
-            // Isolate $...$ to own lines so JLatexMathPlugin renders reliably.
+            // Isolate $...$ to own lines, then convert all $...$ to $$...$$ for reliable rendering.
             if (s.indexOf('$') >= 0) {
                 val isolated = isolateInlineMath(s)
                 if (isolated != null) {
                     for (part in isolated) {
                         val cjkParts = extractCjkTextFromMath(part)
                         if (cjkParts != null) {
-                            for (cp in cjkParts) out.add(cp)
+                            for (cp in cjkParts) out.add(toDisplayMath(cp))
                         } else {
-                            out.add(part)
+                            out.add(toDisplayMath(part))
                         }
                     }
                     i++
@@ -463,10 +463,11 @@ object MarkwonFactory {
                 }
                 val cjkParts = extractCjkTextFromMath(s)
                 if (cjkParts != null) {
-                    for (cp in cjkParts) out.add(cp)
+                    for (cp in cjkParts) out.add(toDisplayMath(cp))
                     i++
                     continue
                 }
+                s = toDisplayMath(s)
             }
 
             out.add(s)
@@ -497,6 +498,19 @@ object MarkwonFactory {
         }
 
         return out.joinToString("\n")
+    }
+
+    /**
+     * Convert $...$ to $$...$$ so all math renders via the block-math path
+     * (which is more reliable on legacy Android than inline math).
+     * Leaves $$...$$ and non-math text unchanged.
+     */
+    private fun toDisplayMath(s: String): String {
+        if (s.startsWith("$") && s.endsWith("$") && !s.startsWith("$$")) {
+            val inner = s.substring(1, s.length - 1).trim()
+            if (inner.isNotBlank()) return "\$\$${inner}\$\$"
+        }
+        return s
     }
 
     /**
