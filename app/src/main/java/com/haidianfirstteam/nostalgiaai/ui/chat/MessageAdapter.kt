@@ -445,7 +445,7 @@ class MessageAdapter(
             // Preserve newlines to keep line count consistent
             val newlines = content.count { it == '\n' }
             if (newlines > 0) {
-                sb.append('\n'.repeat(newlines))
+                sb.append("\n".repeat(newlines))
             }
             sb.append(' ')
 
